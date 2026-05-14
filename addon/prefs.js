@@ -1,0 +1,12 @@
+pref("extensions.mineru-html.modelVersion", "vlm");
+pref("extensions.mineru-html.language", "ch");
+pref("extensions.mineru-html.enableFormula", true);
+pref("extensions.mineru-html.enableTable", true);
+pref("extensions.mineru-html.isOCR", false);
+pref("extensions.mineru-html.pollIntervalSeconds", 5);
+pref("extensions.mineru-html.maxPollSeconds", 100);
+pref("extensions.mineru-html.apiTokenFallback", "");
+pref("extensions.mineru-html.postprocessHTML", true);
+pref("extensions.mineru-html.cleanupSimpleLatex", true);
+pref("extensions.mineru-html.suppressFigureOCRText", true);
+pref("extensions.mineru-html.justifyText", true);

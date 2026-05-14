@@ -1,0 +1,8 @@
+{
+  "name": {
+    "message": "MinerU HTML Parser"
+  },
+  "description": {
+    "message": "调用 MinerU 精准解析 API，将 Zotero PDF 附件解析为适合阅读的 HTML，并自动附加到条目中。"
+  }
+}

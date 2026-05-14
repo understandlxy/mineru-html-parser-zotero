@@ -1,0 +1,6 @@
+dist/
+__install_probe/
+*.xpi
+*.zip
+.DS_Store
+Thumbs.db

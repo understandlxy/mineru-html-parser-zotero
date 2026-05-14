@@ -1,0 +1,84 @@
+#mineru-html-preferences {
+  max-width: 520px;
+}
+
+#mineru-html-preferences .mineru-html-panel {
+  max-width: 500px;
+}
+
+#mineru-html-preferences .mineru-html-form {
+  max-width: 380px;
+}
+
+#mineru-html-preferences .mineru-html-intro {
+  max-width: 380px;
+  margin-bottom: 18px;
+}
+
+#mineru-html-preferences .mineru-html-intro-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+#mineru-html-preferences .mineru-html-intro-text {
+  line-height: 1.45;
+  margin: 0 0 10px;
+  color: #333;
+}
+
+#mineru-html-preferences .mineru-html-field {
+  margin-bottom: 12px;
+}
+
+#mineru-html-preferences .mineru-html-field > label {
+  margin-bottom: 4px;
+}
+
+#mineru-html-preferences .mineru-html-label-row {
+  margin-bottom: 4px;
+}
+
+#mineru-html-preferences .mineru-html-help-button {
+  min-width: 20px;
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  margin-inline-start: 6px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+#mineru-html-preferences menulist {
+  width: 220px;
+  max-width: 220px;
+}
+
+#mineru-html-preferences html|input {
+  width: 360px;
+  max-width: 360px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#mineru-html-preferences .mineru-html-actions {
+  width: 360px;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#mineru-html-preferences .mineru-html-actions-secondary {
+  margin-top: 6px;
+}
+
+#mineru-html-preferences .mineru-html-separator {
+  margin-top: 2px;
+}
+
+#mineru-html-status {
+  color: #1d6e36;
+}
+
+#mineru-html-preferences .mineru-html-status-row {
+  width: 360px;
+  margin-top: 10px;
+}

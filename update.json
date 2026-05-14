@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "mineru-html@example.com": {
+      "updates": [
+        {
+          "version": "0.1.48",
+          "update_link": "https://github.com/understandlxy/mineru-html-parser-zotero/releases/download/v0.1.48/mineru-html-parser-0.1.48.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "8.0",
+              "strict_max_version": "9.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

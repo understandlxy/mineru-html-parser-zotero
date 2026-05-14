@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+  "name": "__MSG_name__",
+  "version": "0.1.48",
+  "description": "__MSG_description__",
+  "default_locale": "zh_CN",
+  "author": "understandlxy",
+  "homepage_url": "https://github.com/understandlxy/mineru-html-parser-zotero",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "96": "icon96.png"
+  },
+  "applications": {
+    "zotero": {
+      "id": "mineru-html@example.com",
+      "update_url": "https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/update.json",
+      "strict_min_version": "8.0",
+      "strict_max_version": "9.0.*"
+    }
+  }
+}

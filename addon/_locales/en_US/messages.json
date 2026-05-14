@@ -1,0 +1,8 @@
+{
+  "name": {
+    "message": "MinerU HTML Parser"
+  },
+  "description": {
+    "message": "Parse Zotero PDF attachments with the MinerU precise API and attach the generated HTML."
+  }
+}
