@@ -11,5 +11,5 @@ Parse Zotero PDF attachments with the MinerU precise parsing API and attach the 
 
 ## Download
 
-- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.48.xpi)
+- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.49.xpi)
 - [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)
