@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a readable HTML attachment through the MinerU precise parsing API. After parsing succeeds, the plugin imports the generated HTML back to Zotero and opens it automatically.
 
-[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.64.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
+[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.71.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
 
 ## Features
 
@@ -14,7 +14,14 @@ MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a read
   - `POST /api/v4/file-urls/batch` to obtain an upload URL and `batch_id`
   - `PUT` the PDF to the signed upload URL
   - `GET /api/v4/extract-results/batch/{batch_id}` to poll parsing results
-- Requests `extra_formats: ["html"]` and extracts `main.html`, `full.html`, or the first HTML file from the result archive.
+- Builds the reading HTML from MinerU `full.md` first, embeds zip images as data URLs, and asks MinerU to use the `doclayout_yolo` layout model so original figure regions are preserved before HTML generation.
+- Keeps image blocks faithful to MinerU output instead of recombining split subfigures after parsing.
+- Bundles KaTeX to render MinerU LaTeX fragments as MathML and uses a Times New Roman / Noto Serif SC reading font stack.
+- Splits bracketed bibliography entries such as `[1] ... [2] ...` into separate reference paragraphs.
+- Keeps rendered math inside figure/table captions bold with the surrounding caption text.
+- Uses an A4-like page width, screen margins, and print `@page` margins for paper-friendly HTML reading.
+- Automatically compacts wide tables so multi-column tables fit inside the A4-style page.
+- Falls back to `main.html`, `full.html`, or the first HTML file from the result archive if Markdown output is unavailable.
 - Applies reading-oriented HTML cleanup, including paragraph alignment, simple LaTeX cleanup, and common figure-number OCR noise suppression.
 - Attaches both the generated HTML and a `.mineru-postprocess.txt` report back to the Zotero item.
 - Opens the newly attached HTML in Zotero automatically after parsing finishes.
@@ -24,7 +31,7 @@ MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a read
 ### Install From GitHub Release
 
 1. Open the [latest release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest).
-2. Download `mineru-html-parser-0.1.64.xpi`.
+2. Download `mineru-html-parser-0.1.71.xpi`.
 3. Open Zotero.
 4. Go to `Tools -> Plugins`.
 5. Open the gear menu and choose `Install Add-on From File...`.
@@ -33,6 +40,15 @@ MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a read
 ### Install From Add-on Market
 
 If Add-on Market for Zotero has indexed this plugin, search for `MinerU HTML Parser` there and install it directly.
+
+## What's New In 0.1.71
+
+- Uses MinerU's `doclayout_yolo` layout path and avoids post-hoc image recomposition, so grouped figures can stay closer to the original PDF layout.
+- Builds readable HTML from `full.md` first, embeds image resources as data URLs, and keeps HTML fallback for abnormal result archives.
+- Bundles KaTeX and renders `$...$` / `$$...$$` fragments to MathML instead of exposing raw LaTeX in the body text.
+- Uses a Times New Roman / Noto Serif SC font stack with an A4-style page width, screen margins, and print `@page` margins.
+- Splits compacted references such as `[1] ... [2] ...` into separate bibliography paragraphs.
+- Keeps rendered math bold inside figure/table captions and compacts wide tables so they fit within the A4-style page.
 
 ## Configuration
 
@@ -99,3 +115,9 @@ Check:
 - Whether the network can reach the MinerU API and GitHub Release download URLs.
 
 If MinerU returns an API error, the plugin tries to show the returned message.
+
+## Acknowledgements
+
+The MinerU request shape, Markdown-first rendering direction, formula rendering approach, and reference-list handling in this plugin were informed by the Full Text Translate Zotero plugin.
+
+Formula rendering is powered by a bundled KaTeX build.

@@ -112,6 +112,7 @@ async function startup({ id, version, rootURI }) {
 
     async init() {
       this.writeFixedPrefs();
+      this.loadKaTeX();
 
       let prefPaneCandidates = [
         {
@@ -151,6 +152,20 @@ async function startup({ id, version, rootURI }) {
       this.addToAllWindows();
       this.registerMenus();
       log(`Started ${this.version}`);
+    },
+
+    loadKaTeX() {
+      if (globalThis.MinerUHTMLKaTeX?.renderToString) {
+        return true;
+      }
+      try {
+        Services.scriptloader.loadSubScript(this.rootURI + "vendor/mineru-katex.js", globalThis, "UTF-8");
+        return !!globalThis.MinerUHTMLKaTeX?.renderToString;
+      }
+      catch (error) {
+        log(`KaTeX loader failed; falling back to simple formula cleanup. ${error?.stack || error}`);
+        return false;
+      }
     },
 
     writeFixedPrefs() {
@@ -244,6 +259,21 @@ async function startup({ id, version, rootURI }) {
 
     async testMinerUConnection(token) {
       let dataID = this.uuid();
+      let body = this.applyMinerUModelVersion({
+        files: [
+          {
+            name: "mineru-html-connection-test.pdf",
+            data_id: dataID,
+            is_ocr: false
+          }
+        ],
+        extra_formats: ["html"],
+        language: this.pref("language", "ch"),
+        enable_formula: true,
+        enable_table: true,
+        enable_page_ocr: false,
+        layout_model: "doclayout_yolo"
+      });
       let json = await this.fetchJSON(`${this.API_BASE}/file-urls/batch`, {
         method: "POST",
         headers: {
@@ -251,20 +281,7 @@ async function startup({ id, version, rootURI }) {
           "Content-Type": "application/json",
           "Accept": "*/*"
         },
-        body: JSON.stringify({
-          files: [
-            {
-              name: "mineru-html-connection-test.pdf",
-              data_id: dataID
-            }
-          ],
-          model_version: this.pref("modelVersion", "vlm"),
-          extra_formats: ["html"],
-          language: this.pref("language", "ch"),
-          enable_formula: true,
-          enable_table: true,
-          is_ocr: false
-        })
+        body: JSON.stringify(body)
       });
 
       let uploadURL = json?.data?.file_urls?.[0];
@@ -525,28 +542,55 @@ async function startup({ id, version, rootURI }) {
       log(`Downloading MinerU result zip for attachment ${pdfItem.id}`);
       progress?.step("解析完成，正在下载结果 ZIP...", 78);
       await this.downloadFile(result.full_zip_url, zipPath);
-      progress?.step("正在提取 HTML 文件...", 84);
-      await this.extractHTMLFromZip(zipPath, htmlPath);
+      progress?.step("Preparing HTML output...", 84);
+      let sourceInfo;
+      try {
+        progress?.step("Building HTML from MinerU Markdown...", 84);
+        sourceInfo = await this.extractMarkdownHTMLFromZip(zipPath, htmlPath, {
+          title: fileName.replace(/\.pdf$/i, ""),
+          sourceFileName: fileName
+        });
+      }
+      catch (error) {
+        log(`Markdown-first HTML generation failed; falling back to MinerU HTML. ${error?.stack || error}`);
+        await this.extractHTMLFromZip(zipPath, htmlPath);
+        sourceInfo = {
+          sourceMode: "html-fallback",
+          markdownImages: 0,
+          imageGroups: 0,
+          markdownBlocks: 0,
+          fallbackReason: error?.message || String(error)
+        };
+      }
       progress?.step("正在优化 HTML 显示样式...", 88);
-      let report = await this.postprocessHTML(htmlPath, { reportPath, sourceFileName: fileName, dataID });
+      let report = await this.postprocessHTML(htmlPath, {
+        reportPath,
+        sourceFileName: fileName,
+        dataID,
+        ...sourceInfo
+      });
       return { htmlPath, reportPath: report?.reportPath || null };
     },
 
     async requestUploadURL({ token, fileName, dataID }) {
+      let isOCR = Boolean(this.pref("isOCR", false));
+      let mineruFileName = this.normalizeMinerUFileName(fileName);
       let body = {
         files: [
           {
-            name: fileName,
-            data_id: dataID
+            name: mineruFileName,
+            data_id: dataID,
+            is_ocr: isOCR
           }
         ],
-        model_version: this.pref("modelVersion", "vlm"),
         extra_formats: ["html"],
         language: this.pref("language", "ch"),
         enable_formula: this.pref("enableFormula", true),
         enable_table: this.pref("enableTable", true),
-        is_ocr: this.pref("isOCR", false)
+        enable_page_ocr: isOCR,
+        layout_model: "doclayout_yolo"
       };
+      this.applyMinerUModelVersion(body);
 
       let json = await this.fetchJSON(`${this.API_BASE}/file-urls/batch`, {
         method: "POST",
@@ -564,6 +608,14 @@ async function startup({ id, version, rootURI }) {
         throw new Error("MinerU did not return an upload URL and batch_id.");
       }
       return { batchID, uploadURL };
+    },
+
+    applyMinerUModelVersion(body) {
+      let modelVersion = this.pref("modelVersion", "vlm");
+      if (modelVersion && modelVersion !== "vlm") {
+        body.model_version = modelVersion;
+      }
+      return body;
     },
 
     async uploadFile(uploadURL, filePath) {
@@ -676,6 +728,500 @@ async function startup({ id, version, rootURI }) {
       return entries[0];
     },
 
+    async extractMarkdownHTMLFromZip(zipPath, htmlPath, options = {}) {
+      let zipFile = this.localFile(zipPath);
+      let zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+      zipReader.open(zipFile);
+      try {
+        let markdownEntry = this.findZipEntry(zipReader, /(^|\/)full\.md$/i);
+        if (!markdownEntry) {
+          throw new Error("MinerU result zip did not contain full.md.");
+        }
+        let markdown = await this.readZipTextEntry(zipReader, markdownEntry);
+        if (!markdown || !markdown.trim()) {
+          throw new Error("MinerU full.md was empty.");
+        }
+        let markdownImageMap = await this.buildMarkdownImageMap(zipReader, markdown);
+        let rendered = this.renderMarkdownDocument(markdown, {
+          title: options.title || options.sourceFileName || "MinerU HTML",
+          imageMap: markdownImageMap
+        });
+        await IOUtils.write(htmlPath, new TextEncoder().encode(rendered.html));
+        return {
+          sourceMode: "markdown",
+          markdownImages: rendered.markdownImages,
+          imageGroups: rendered.imageGroups,
+          markdownBlocks: rendered.markdownBlocks
+        };
+      }
+      finally {
+        zipReader.close();
+      }
+    },
+
+    findZipEntry(zipReader, pattern) {
+      let entries = zipReader.findEntries("*");
+      while (entries.hasMore()) {
+        let entry = entries.getNext();
+        if (typeof entry === "string" && pattern.test(entry.replace(/\\/g, "/"))) {
+          return entry;
+        }
+      }
+      return "";
+    },
+
+    async readZipTextEntry(zipReader, entry) {
+      let stream = zipReader.getInputStream(entry);
+      return await Zotero.File.getContentsAsync(stream, "utf-8");
+    },
+
+    async buildMarkdownImageMap(zipReader, markdown) {
+      let imageMap = {};
+      let seen = new Set();
+      let pattern = /!\[[^\]]*\]\(([^)\n]+)\)/g;
+      let match;
+      while ((match = pattern.exec(markdown))) {
+        let ref = this.parseMarkdownImageDestination(match[1]);
+        if (!ref || /^(?:https?:|data:|file:)/i.test(ref) || seen.has(ref)) {
+          continue;
+        }
+        seen.add(ref);
+        let dataURL = await this.extractZipImageDataURL(zipReader, ref);
+        if (dataURL) {
+          imageMap[ref] = dataURL;
+        }
+      }
+      return imageMap;
+    },
+
+    async extractZipImageDataURL(zipReader, entry) {
+      let resolvedEntry = this.resolveZipEntry(zipReader, entry);
+      if (!resolvedEntry) {
+        return "";
+      }
+      let stream = zipReader.getInputStream(resolvedEntry);
+      let binaryStream = Cc["@mozilla.org/binaryinputstream;1"].createInstance(Ci.nsIBinaryInputStream);
+      binaryStream.setInputStream(stream);
+      let binary = "";
+      try {
+        while (binaryStream.available() > 0) {
+          binary += binaryStream.readBytes(binaryStream.available());
+        }
+      }
+      finally {
+        binaryStream.close();
+        stream.close();
+      }
+      if (!binary) {
+        return "";
+      }
+      let ext = (resolvedEntry.split(".").pop() || "png").toLowerCase();
+      let mime = ext === "jpg" || ext === "jpeg"
+        ? "image/jpeg"
+        : ext === "gif"
+          ? "image/gif"
+          : ext === "webp"
+            ? "image/webp"
+            : "image/png";
+      return `data:${mime};base64,${btoa(binary)}`;
+    },
+
+    resolveZipEntry(zipReader, entry) {
+      let candidates = [String(entry || "").replace(/\\/g, "/")];
+      try {
+        let decoded = decodeURIComponent(candidates[0]);
+        if (decoded !== candidates[0]) {
+          candidates.push(decoded);
+        }
+      }
+      catch (_) {
+      }
+      let entries = zipReader.findEntries("*");
+      while (entries.hasMore()) {
+        let current = entries.getNext();
+        if (typeof current !== "string") {
+          continue;
+        }
+        let normalizedCurrent = current.replace(/\\/g, "/");
+        if (candidates.some(candidate => normalizedCurrent === candidate || normalizedCurrent.endsWith(`/${candidate}`))) {
+          return current;
+        }
+      }
+      return "";
+    },
+
+    renderMarkdownDocument(markdown, options = {}) {
+      let blocks = this.splitMarkdownBlocks(markdown);
+      let sections = [];
+      let markdownImages = 0;
+      let imageGroups = 0;
+      for (let index = 0; index < blocks.length; index++) {
+        let images = this.extractMarkdownImagesFromBlock(blocks[index]);
+        if (images.length) {
+          markdownImages += images.length;
+          sections.push(this.renderMarkdownImageFigure(images, options.imageMap || {}));
+          continue;
+        }
+        let html = this.renderMarkdownBlock(blocks[index], options.imageMap || {});
+        if (html) {
+          sections.push(html);
+        }
+      }
+      return {
+        html: this.wrapRenderedMarkdownHTML(options.title || "MinerU HTML", sections.join("\n")),
+        markdownImages,
+        imageGroups,
+        markdownBlocks: blocks.length
+      };
+    },
+
+    splitMarkdownBlocks(markdown) {
+      let lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+      let blocks = [];
+      let index = 0;
+      let pushBlock = buffer => {
+        let block = buffer.join("\n").trim();
+        if (block) {
+          blocks.push(block);
+        }
+      };
+      while (index < lines.length) {
+        let line = lines[index];
+        let trimmed = line.trim();
+        if (!trimmed) {
+          index++;
+          continue;
+        }
+        if (trimmed.startsWith("```")) {
+          let buffer = [line];
+          index++;
+          while (index < lines.length) {
+            buffer.push(lines[index]);
+            if (lines[index].trim().startsWith("```")) {
+              index++;
+              break;
+            }
+            index++;
+          }
+          pushBlock(buffer);
+          continue;
+        }
+        if (trimmed === "$$") {
+          let buffer = [line];
+          index++;
+          while (index < lines.length) {
+            buffer.push(lines[index]);
+            if (lines[index].trim() === "$$") {
+              index++;
+              break;
+            }
+            index++;
+          }
+          pushBlock(buffer);
+          continue;
+        }
+        if (/^<table\b/i.test(trimmed)) {
+          let buffer = [line];
+          index++;
+          while (index < lines.length && !/<\/table>/i.test(buffer[buffer.length - 1])) {
+            buffer.push(lines[index]);
+            index++;
+          }
+          pushBlock(buffer);
+          continue;
+        }
+        if (this.isMarkdownImageLine(trimmed) || this.isMarkdownImageListLine(trimmed)) {
+          let buffer = [line];
+          index++;
+          while (index < lines.length) {
+            let nextTrimmed = lines[index].trim();
+            if (!nextTrimmed || (!this.isMarkdownImageLine(nextTrimmed) && !this.isMarkdownImageListLine(nextTrimmed))) {
+              break;
+            }
+            buffer.push(lines[index]);
+            index++;
+          }
+          pushBlock(buffer);
+          continue;
+        }
+        if (/^\s*#{1,6}\s+/.test(trimmed) || this.isMarkdownTableRow(trimmed)) {
+          let buffer = [line];
+          index++;
+          if (this.isMarkdownTableRow(trimmed)) {
+            while (index < lines.length && this.isMarkdownTableRow(lines[index].trim())) {
+              buffer.push(lines[index]);
+              index++;
+            }
+          }
+          pushBlock(buffer);
+          continue;
+        }
+        let buffer = [line];
+        index++;
+        while (index < lines.length) {
+          let nextTrimmed = lines[index].trim();
+          if (
+            !nextTrimmed
+            || nextTrimmed.startsWith("```")
+            || nextTrimmed === "$$"
+            || /^<table\b/i.test(nextTrimmed)
+            || this.isMarkdownImageLine(nextTrimmed)
+            || this.isMarkdownImageListLine(nextTrimmed)
+            || /^\s*#{1,6}\s+/.test(nextTrimmed)
+            || this.isMarkdownTableRow(nextTrimmed)
+          ) {
+            break;
+          }
+          buffer.push(lines[index]);
+          index++;
+        }
+        pushBlock(buffer);
+      }
+      return blocks;
+    },
+
+    renderMarkdownBlock(block) {
+      let trimmed = String(block || "").trim();
+      if (!trimmed) {
+        return "";
+      }
+      if (/^<table\b/i.test(trimmed)) {
+        return trimmed;
+      }
+      if (/^```/.test(trimmed)) {
+        let content = trimmed.replace(/^```[^\n]*\n?/, "").replace(/\n?```\s*$/, "");
+        return `<pre><code>${this.escapeHTML(content)}</code></pre>`;
+      }
+      if (/^\$\$[\s\S]*\$\$$/.test(trimmed)) {
+        return `<div class="mineru-formula-block">${this.renderFormulaHTML(trimmed, true)}</div>`;
+      }
+      let heading = trimmed.match(/^(#{1,6})\s+([\s\S]+)$/);
+      if (heading) {
+        let level = Math.max(1, Math.min(heading[1].length, 6));
+        return `<h${level}>${this.renderMarkdownInline(heading[2].trim())}</h${level}>`;
+      }
+      if (this.isMarkdownTableBlock(trimmed)) {
+        return this.renderMarkdownTable(trimmed);
+      }
+      if (this.isReferenceListBlock(trimmed)) {
+        return this.renderReferenceListBlock(trimmed, entry => this.renderMarkdownInline(entry));
+      }
+      let listItems = this.extractTextListItems(trimmed);
+      if (listItems.length) {
+        return `<ul>\n${listItems.map(item => `<li>${this.renderMarkdownInline(item)}</li>`).join("\n")}\n</ul>`;
+      }
+      let paragraphs = trimmed.split(/\n{2,}/).map(part => part.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
+      return paragraphs.map(part => `<p>${this.renderMarkdownInline(part)}</p>`).join("\n");
+    },
+
+    renderMarkdownImageFigure(images, imageMap) {
+      let renderedImages = images
+        .map(image => this.renderMarkdownImageElement(image, imageMap))
+        .filter(Boolean);
+      if (!renderedImages.length) {
+        return "";
+      }
+      return renderedImages
+        .map(image => `<figure class="mineru-image-block">${image}</figure>`)
+        .join("\n");
+    },
+
+    renderMarkdownImageElement(image, imageMap) {
+      if (image.html) {
+        return this.rewriteImageHTMLSource(image.html, imageMap);
+      }
+      let originalSrc = image.src || "";
+      let src = imageMap[originalSrc] || originalSrc;
+      if (!src) {
+        return "";
+      }
+      return `<img src="${this.escapeAttribute(src)}" alt="${this.escapeAttribute(image.alt || "")}" />`;
+    },
+
+    rewriteImageHTMLSource(imageHTML, imageMap) {
+      return imageHTML.replace(/\bsrc\s*=\s*(["'])(.*?)\1/i, (match, quote, src) => {
+        let rewritten = imageMap[src] || src;
+        return `src=${quote}${this.escapeAttribute(rewritten)}${quote}`;
+      });
+    },
+
+    extractMarkdownImagesFromBlock(block) {
+      let images = [];
+      let lines = String(block || "").split(/\n/).map(line => line.trim()).filter(Boolean);
+      if (!lines.length) {
+        return images;
+      }
+      for (let line of lines) {
+        let image = this.parseMarkdownImageLine(line);
+        if (!image) {
+          return [];
+        }
+        images.push(image);
+      }
+      return images;
+    },
+
+    parseMarkdownImageLine(line) {
+      let value = String(line || "").trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "").trim();
+      let markdownImage = value.match(/^!\[([^\]]*)\]\(([^)\n]+)\)$/);
+      if (markdownImage) {
+        return {
+          alt: markdownImage[1] || "",
+          src: this.parseMarkdownImageDestination(markdownImage[2])
+        };
+      }
+      if (/^<img\b[^>]*>$/i.test(value)) {
+        return { html: value };
+      }
+      return null;
+    },
+
+    parseMarkdownImageDestination(value) {
+      let trimmed = String(value || "").trim();
+      if (trimmed.startsWith("<") && trimmed.includes(">")) {
+        return trimmed.slice(1, trimmed.indexOf(">")).trim();
+      }
+      return trimmed.replace(/\s+["'][^"']*["']\s*$/, "").trim();
+    },
+
+    isMarkdownImageLine(line) {
+      return !!this.parseMarkdownImageLine(line);
+    },
+
+    isMarkdownImageListLine(line) {
+      return !!this.parseMarkdownImageLine(String(line || "").trim());
+    },
+
+    isMarkdownTableRow(line) {
+      return /^\|.*\|\s*$/.test(line) || /^[-:| ]+$/.test(line);
+    },
+
+    isMarkdownTableBlock(block) {
+      let lines = String(block || "").split(/\n/).map(line => line.trim()).filter(Boolean);
+      return lines.length >= 2 && lines.every(line => this.isMarkdownTableRow(line));
+    },
+
+    renderMarkdownTable(block) {
+      let rows = String(block || "").split(/\n/).map(line => line.trim()).filter(Boolean);
+      let cells = rows.map(row => row.replace(/^\||\|$/g, "").split("|").map(cell => cell.trim()));
+      if (cells.length >= 2 && /^[-:| ]+$/.test(rows[1])) {
+        cells.splice(1, 1);
+      }
+      if (!cells.length) {
+        return "";
+      }
+      let header = cells.shift();
+      let html = ["<table>", "<thead><tr>"];
+      html.push(...header.map(cell => `<th>${this.renderMarkdownInline(cell)}</th>`));
+      html.push("</tr></thead>");
+      if (cells.length) {
+        html.push("<tbody>");
+        for (let row of cells) {
+          html.push("<tr>");
+          html.push(...row.map(cell => `<td>${this.renderMarkdownInline(cell)}</td>`));
+          html.push("</tr>");
+        }
+        html.push("</tbody>");
+      }
+      html.push("</table>");
+      return html.join("\n");
+    },
+
+    isReferenceListBlock(block) {
+      let value = String(block || "").trim();
+      if (!/^\[\d{1,3}\]\s+/.test(value)) {
+        return false;
+      }
+      return this.splitReferenceEntries(value).length >= 2;
+    },
+
+    splitReferenceEntries(text) {
+      let value = String(text || "").replace(/\r\n/g, "\n").trim();
+      if (!value) {
+        return [];
+      }
+
+      let entries = [];
+      let current = "";
+      for (let line of value.split(/\n+/).map(part => part.trim()).filter(Boolean)) {
+        if (/^\[\d{1,3}\]\s+/.test(line)) {
+          if (current) {
+            entries.push(current.trim());
+          }
+          current = line;
+        }
+        else if (current) {
+          current += ` ${line}`;
+        }
+      }
+      if (current) {
+        entries.push(current.trim());
+      }
+      if (entries.length > 1) {
+        return entries;
+      }
+
+      let compact = value.replace(/\s+/g, " ");
+      return compact
+        .split(/(?=\[\d{1,3}\]\s+)/g)
+        .map(entry => entry.trim())
+        .filter(entry => /^\[\d{1,3}\]\s+/.test(entry));
+    },
+
+    renderReferenceListBlock(text, renderEntry) {
+      let entries = this.splitReferenceEntries(text);
+      if (entries.length < 2) {
+        return "";
+      }
+      return `<div class="mineru-reference-list">\n${entries.map(entry => {
+        return `<p class="mineru-reference">${renderEntry(entry)}</p>`;
+      }).join("\n")}\n</div>`;
+    },
+
+    extractTextListItems(block) {
+      let lines = String(block || "").split(/\n/).map(line => line.trim()).filter(Boolean);
+      if (!lines.length || !lines.every(line => /^(?:[-*+]|\d+[.)])\s+/.test(line))) {
+        return [];
+      }
+      let items = [];
+      for (let line of lines) {
+        let text = line.replace(/^(?:[-*+]|\d+[.)])\s+/, "").trim();
+        if (this.parseMarkdownImageLine(text)) {
+          return [];
+        }
+        items.push(text);
+      }
+      return items;
+    },
+
+    renderMarkdownInline(text) {
+      let html = this.escapeHTML(String(text || ""));
+      html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, href) => {
+        return `<a href="${this.escapeAttribute(this.parseMarkdownImageDestination(href))}">${label}</a>`;
+      });
+      return html;
+    },
+
+    wrapRenderedMarkdownHTML(title, bodyHTML) {
+      return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${this.escapeHTML(title)}</title>
+</head>
+<body>
+  <main class="mineru-markdown-document">
+    <h1>${this.escapeHTML(title)}</h1>
+${bodyHTML}
+  </main>
+</body>
+</html>`;
+    },
+
     async postprocessHTML(htmlPath, options = {}) {
       if (!this.pref("postprocessHTML", true)) {
         return null;
@@ -687,7 +1233,12 @@ async function startup({ id, version, rootURI }) {
         htmlPath,
         sourceFileName: options.sourceFileName,
         dataID: options.dataID,
-        originalHTML: html
+        originalHTML: html,
+        sourceMode: options.sourceMode,
+        markdownImages: options.markdownImages,
+        imageGroups: options.imageGroups,
+        markdownBlocks: options.markdownBlocks,
+        fallbackReason: options.fallbackReason
       });
       let updated = this.runPostprocessStep(report, "injectReadableStyles", html, value => this.injectReadableStyles(value));
       if (this.pref("suppressFigureOCRText", true)) {
@@ -697,7 +1248,6 @@ async function startup({ id, version, rootURI }) {
       updated = this.runPostprocessStep(report, "centerSubfigureCaptions", updated, value => this.centerSubfigureCaptions(value));
       updated = this.runPostprocessStep(report, "normalizeSubfigureCaptionList", updated, value => this.normalizeSubfigureCaptionList(value));
       updated = this.runPostprocessStep(report, "normalizeLabelCaptionImageListItems", updated, value => this.normalizeLabelCaptionImageListItems(value));
-      updated = this.runPostprocessStep(report, "unwrapImageOnlyLists", updated, value => this.unwrapImageOnlyLists(value));
       updated = this.runPostprocessStep(report, "removeCaptionAdjacentPipeNoise", updated, value => this.removeCaptionAdjacentPipeNoise(value));
       updated = this.runPostprocessStep(report, "normalizeCaptionLists", updated, value => this.normalizeCaptionLists(value));
       updated = this.runPostprocessStep(report, "splitLooseCaptionImageParagraphs", updated, value => this.splitLooseCaptionImageParagraphs(value));
@@ -717,6 +1267,8 @@ async function startup({ id, version, rootURI }) {
         updated = this.runPostprocessStep(report, "cleanupSimpleLatex", updated, value => this.cleanupSimpleLatex(value));
         updated = this.runPostprocessStep(report, "normalizePlainTableMathNotation", updated, value => this.normalizePlainTableMathNotation(value));
       }
+      updated = this.runPostprocessStep(report, "markWideTables", updated, value => this.markWideTables(value));
+      updated = this.runPostprocessStep(report, "splitReferenceParagraphs", updated, value => this.splitReferenceParagraphs(value));
 
       if (updated !== html) {
         await IOUtils.write(htmlPath, new TextEncoder().encode(updated));
@@ -730,7 +1282,7 @@ async function startup({ id, version, rootURI }) {
       return { reportPath: null, report };
     },
 
-    createPostprocessReport({ htmlPath, sourceFileName, dataID, originalHTML }) {
+    createPostprocessReport({ htmlPath, sourceFileName, dataID, originalHTML, sourceMode, markdownImages, imageGroups, markdownBlocks, fallbackReason }) {
       let createdAt = new Date().toISOString();
       return {
         createdAt,
@@ -739,6 +1291,11 @@ async function startup({ id, version, rootURI }) {
         sourceFileName: sourceFileName || "",
         dataID: dataID || "",
         htmlPath,
+        sourceMode: sourceMode || "html-fallback",
+        markdownImages: markdownImages || 0,
+        imageGroups: imageGroups || 0,
+        markdownBlocks: markdownBlocks || 0,
+        fallbackReason: fallbackReason || "",
         initial: this.collectPostprocessSignals(originalHTML),
         final: null,
         changed: false,
@@ -764,6 +1321,7 @@ async function startup({ id, version, rootURI }) {
       return {
         characters: html.length,
         images: this.countMatches(html, /<img\b/gi),
+        imageGroups: this.countMatches(html, /\bmineru-image-group\b/gi),
         figureCaptionRefs: this.countMatches(html, /\bfig\.\s*\d+\./gi),
         tableCaptionRefs: this.countMatches(html, /\btable\s*\d+\b/gi),
         figureNumbers: this.extractFigureCaptionNumbers(html)
@@ -802,11 +1360,17 @@ async function startup({ id, version, rootURI }) {
         `Source PDF: ${report.sourceFileName}`,
         `MinerU data_id: ${report.dataID}`,
         `HTML path: ${report.htmlPath}`,
+        `Source mode: ${report.sourceMode}`,
+        `Markdown blocks: ${report.markdownBlocks}`,
+        `Markdown image refs: ${report.markdownImages}`,
+        `Image groups created: ${report.imageGroups}`,
+        `Fallback reason: ${report.fallbackReason || "(none)"}`,
         `HTML changed: ${report.changed ? "yes" : "no"}`,
         "",
         "Summary",
         `Characters: ${report.initial.characters} -> ${report.final.characters}`,
         `Images: ${report.initial.images} -> ${report.final.images}`,
+        `Image groups: ${report.initial.imageGroups} -> ${report.final.imageGroups}`,
         `Figure caption refs: ${report.initial.figureCaptionRefs} -> ${report.final.figureCaptionRefs}`,
         `Table caption refs: ${report.initial.tableCaptionRefs} -> ${report.final.tableCaptionRefs}`,
         `Figure numbers before: ${report.initial.figureNumbers.join(", ") || "(none)"}`,
@@ -833,28 +1397,51 @@ async function startup({ id, version, rootURI }) {
         ? "text-align: justify !important;\n  text-justify: inter-word !important;"
         : "text-align: left !important;";
 
-      let style = `
+let style = `
 <style id="${marker}">
+html {
+  background: #f2f2f2 !important;
+}
 body {
-  max-width: min(1120px, calc(100vw - 96px)) !important;
-  padding: 48px !important;
-  margin: 0 auto !important;
-  line-height: 1.58 !important;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  box-sizing: border-box !important;
+  width: min(210mm, calc(100vw - 32px)) !important;
+  min-height: 297mm !important;
+  padding: 18mm 18mm 22mm 18mm !important;
+  margin: 16px auto !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.10) !important;
+  font: 16px/1.8 "Times New Roman", "Noto Serif SC", serif !important;
   hyphens: none !important;
   overflow-wrap: normal !important;
   word-break: normal !important;
+}
+*, *::before, *::after {
+  box-sizing: inherit !important;
+}
+body, main, p, li, blockquote, table, th, td, h1, h2, h3, h4, h5, h6, figcaption, span {
+  font-family: "Times New Roman", "Noto Serif SC", serif !important;
 }
 p, li, blockquote {
   overflow-wrap: normal !important;
   word-break: normal !important;
   ${paragraphAlignment}
 }
+p.mineru-reference {
+  margin: 0 0 0.7em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+}
+.mineru-reference-list {
+  margin: 0.8em 0 1.2em 0 !important;
+}
 h1, h2, h3 {
   line-height: 1.18 !important;
 }
 table p, table li, pre, code {
   text-align: left !important;
+}
+pre, code {
+  font-family: Consolas, "Courier New", monospace !important;
 }
 table {
   display: table !important;
@@ -896,11 +1483,37 @@ table td:not(:first-child),
 table th:not(:first-child) {
   text-align: center !important;
 }
+table.mineru-wide-table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  font-size: 0.78em !important;
+  line-height: 1.18 !important;
+}
+table.mineru-wide-table td,
+table.mineru-wide-table th {
+  min-width: 0 !important;
+  padding: 0.28em 0.38em !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  hyphens: none !important;
+}
 img, svg {
   display: block !important;
   height: auto !important;
   max-width: 100% !important;
   margin: 1.25em auto !important;
+}
+main.mineru-markdown-document {
+  max-width: 100% !important;
+}
+figure.mineru-image-block {
+  margin: 1.5em auto !important;
+  text-align: center !important;
+}
+figure.mineru-image-block img,
+figure.mineru-image-block svg {
+  margin: 0 auto !important;
 }
 figure.mineru-subfigure {
   margin: 1.5em auto !important;
@@ -917,10 +1530,36 @@ p.mineru-table-caption {
   font-weight: 650 !important;
   margin: 0.45em auto 1.2em auto !important;
 }
+figcaption.mineru-subcaption *,
+p.mineru-figure-caption *,
+p.mineru-table-caption * {
+  font-weight: 650 !important;
+}
+figcaption.mineru-subcaption math,
+figcaption.mineru-subcaption math *,
+p.mineru-figure-caption math,
+p.mineru-figure-caption math *,
+p.mineru-table-caption math,
+p.mineru-table-caption math * {
+  font-weight: 650 !important;
+}
 .mineru-inline-math {
   font-family: "Times New Roman", "Cambria Math", serif !important;
   font-style: italic !important;
   white-space: nowrap !important;
+}
+.mineru-formula-block {
+  margin: 0.85em auto 1.1em auto !important;
+  overflow-x: auto !important;
+  text-align: center !important;
+}
+.katex,
+math {
+  font-family: "Times New Roman", "Cambria Math", serif !important;
+}
+.katex {
+  font-size: 1em !important;
+  line-height: 1.2 !important;
 }
 .mineru-inline-math sup,
 .mineru-inline-math sub {
@@ -931,9 +1570,35 @@ pre {
   white-space: pre-wrap !important;
 }
 @media (max-width: 760px) {
+  html {
+    background: #fff !important;
+  }
   body {
-    max-width: none !important;
+    width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
     padding: 18px !important;
+    box-shadow: none !important;
+  }
+}
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+}
+@media print {
+  html {
+    background: #fff !important;
+  }
+  body {
+    width: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
   }
 }
 </style>`;
@@ -1175,6 +1840,9 @@ pre {
 
     splitLooseCaptionImageParagraphs(html) {
       return html.replace(/<p([^>]*)>((?:(?!<p\b|<\/p>|<img\b)[\s\S])*?)<br\s*\/?>\s*(<img\b[^>]*>)\s*(?:<br\s*\/?>)?/gi, (match, attrs, beforeImage, image) => {
+        if (this.shouldPreserveImageGroupFragment(match)) {
+          return match;
+        }
         let text = this.plainText(beforeImage).replace(/\s+/g, " ").trim();
         if (!this.isFigureCaptionText(text) && !this.isTableCaptionText(text)) {
           return match;
@@ -1187,6 +1855,9 @@ pre {
 
     splitCaptionParagraphImages(html) {
       return html.replace(/<p([^>]*)>((?:(?!<p\b|<\/p>)[\s\S])*?)(<br\s*\/?>\s*)?(<img\b[^>]*>)\s*<\/p>/gi, (match, attrs, beforeImage, br, image) => {
+        if (this.shouldPreserveImageGroupFragment(match)) {
+          return match;
+        }
         let text = this.plainText(beforeImage).replace(/\s+/g, " ").trim();
         if (!this.isFigureCaptionText(text) && !this.isTableCaptionText(text)) {
           return match;
@@ -1199,6 +1870,9 @@ pre {
 
     splitImageCaptionParagraphs(html) {
       return html.replace(/<p([^>]*)>\s*(<img\b[^>]*>)\s*(?:<br\s*\/?>\s*)?((?:(?!<p\b|<\/p>)[\s\S])+?)<\/p>/gi, (match, attrs, image, afterImage) => {
+        if (this.shouldPreserveImageGroupFragment(match)) {
+          return match;
+        }
         let text = this.plainText(afterImage).replace(/\s+/g, " ").trim();
         if (!this.isFigureCaptionText(text) && !this.isTableCaptionText(text)) {
           return match;
@@ -1285,6 +1959,20 @@ pre {
           .join(" ");
         return remaining ? ` class=${quote}${remaining}${quote}` : "";
       });
+    },
+
+    addClassToAttributes(attrs, className) {
+      let value = String(attrs || "");
+      if (new RegExp(`\\b${this.escapeRegExp(className)}\\b`).test(value)) {
+        return value;
+      }
+      if (/\sclass\s*=\s*(["'])([^"']*)\1/i.test(value)) {
+        return value.replace(/\sclass\s*=\s*(["'])([^"']*)\1/i, (match, quote, classValue) => {
+          let classes = `${classValue} ${className}`.trim().replace(/\s+/g, " ");
+          return ` class=${quote}${classes}${quote}`;
+        });
+      }
+      return `${value} class="${className}"`;
     },
 
     isFigureCaptionText(text) {
@@ -1432,18 +2120,12 @@ pre {
       return value;
     },
 
-    unwrapImageOnlyLists(html) {
-      return html.replace(/<(ol|ul)\b[^>]*>([\s\S]*?)<\/\1>/gi, (match, tag, inner) => {
-        let images = [];
-        let rest = inner.replace(/<li\b[^>]*>\s*(?:<p>\s*)?(<img\b[^>]*>)\s*(?:<\/p>\s*)?<\/li>/gi, (item, image) => {
-          images.push(image);
-          return "";
-        });
-        if (!images.length || rest.replace(/\s+/g, "")) {
-          return match;
-        }
-        return images.map(image => `<p>${image}</p>`).join("\n");
-      });
+    shouldPreserveImageGroupFragment(fragment) {
+      let value = String(fragment || "");
+      return /\bmineru-(?:image-group|markdown-image-group|fallback-image-group)\b/i.test(value)
+        || /<figure\b/i.test(value)
+        || /<(?:ol|ul|li)\b/i.test(value)
+        || this.countMatches(value, /<img\b/gi) > 1;
     },
 
     isOCRBlockHeaderBeforeContinuation(line, nextLine) {
@@ -1762,6 +2444,12 @@ pre {
         .replace(/>/g, "&gt;");
     },
 
+    escapeAttribute(text) {
+      return this.escapeHTML(String(text || ""))
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    },
+
     escapeRegExp(text) {
       return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     },
@@ -1810,15 +2498,102 @@ pre {
     },
 
     cleanupSimpleLatex(html) {
-      return html.replace(/\$([^$\n]{1,120})\$/g, (match, expression) => {
+      let updated = html.replace(/\$\$([\s\S]{1,3000}?)\$\$/g, (match, expression) => {
+        return `<div class="mineru-formula-block">${this.renderFormulaHTML(expression, true)}</div>`;
+      });
+      updated = updated.replace(/\$([^$\n]{1,500})\$/g, (match, expression) => {
+        let rendered = this.renderFormulaHTML(expression, false);
+        if (rendered) {
+          return rendered;
+        }
         let cleaned = this.cleanLatexExpression(expression);
         return cleaned || match;
       });
+      return this.normalizeSpacedScientificUnits(updated);
+    },
+
+    renderFormulaHTML(expression, displayMode = false) {
+      let raw = String(expression || "").trim();
+      if (!raw) {
+        return "";
+      }
+      let stripped = this.stripMathDelimiters(raw);
+      let renderer = globalThis.MinerUHTMLKaTeX;
+      if (renderer?.renderToString) {
+        try {
+          return renderer.renderToString(stripped.expression.trim(), {
+            throwOnError: false,
+            output: "mathml",
+            displayMode: displayMode || stripped.displayMode,
+            strict: "ignore"
+          });
+        }
+        catch (error) {
+          log(`KaTeX render failed: ${error?.message || error}`);
+        }
+      }
+      let cleaned = this.cleanLatexExpression(stripped.expression);
+      return cleaned || this.escapeHTML(raw);
+    },
+
+    stripMathDelimiters(expression) {
+      let value = String(expression || "").trim();
+      if (value.startsWith("$$") && value.endsWith("$$") && value.length >= 4) {
+        return { expression: value.slice(2, -2), displayMode: true };
+      }
+      if (value.startsWith("$") && value.endsWith("$") && value.length >= 2) {
+        return { expression: value.slice(1, -1), displayMode: false };
+      }
+      if (value.startsWith("\\[") && value.endsWith("\\]")) {
+        return { expression: value.slice(2, -2), displayMode: true };
+      }
+      if (value.startsWith("\\(") && value.endsWith("\\)")) {
+        return { expression: value.slice(2, -2), displayMode: false };
+      }
+      return { expression: value, displayMode: false };
     },
 
     normalizePlainTableMathNotation(html) {
       return html.replace(/<td>\s*([A-Za-z])_([A-Za-z](?:,?[A-Za-z]){0,5})\s*<\/td>/g, (match, base, subscript) => {
         return `<td><span class="mineru-inline-math">${base}<sub>${subscript}</sub></span></td>`;
+      });
+    },
+
+    markWideTables(html) {
+      return html.replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (match, attrs, inner) => {
+        if (/\bmineru-wide-table\b/i.test(attrs || "")) {
+          return match;
+        }
+        let maxColumns = this.maxTableColumns(inner);
+        if (maxColumns < 7) {
+          return match;
+        }
+        return `<table${this.addClassToAttributes(attrs, "mineru-wide-table")}>${inner}</table>`;
+      });
+    },
+
+    maxTableColumns(tableInnerHTML) {
+      let maxColumns = 0;
+      String(tableInnerHTML || "").replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, (rowMatch, rowInner) => {
+        let columns = 0;
+        rowInner.replace(/<t[dh]\b([^>]*)>/gi, (cellMatch, attrs) => {
+          let colspan = String(attrs || "").match(/\bcolspan\s*=\s*(["']?)(\d+)\1/i);
+          columns += colspan ? Math.max(1, parseInt(colspan[2], 10) || 1) : 1;
+          return cellMatch;
+        });
+        maxColumns = Math.max(maxColumns, columns);
+        return rowMatch;
+      });
+      return maxColumns;
+    },
+
+    splitReferenceParagraphs(html) {
+      return html.replace(/<p([^>]*)>\s*(\[\d{1,3}\]\s+[\s\S]*?\[\d{1,3}\]\s+[\s\S]*?)\s*<\/p>/gi, (match, attrs, content) => {
+        let entries = this.splitReferenceEntries(content);
+        if (entries.length < 2) {
+          return match;
+        }
+        return this.renderReferenceListBlock(content, entry => entry);
       });
     },
 
@@ -1837,15 +2612,15 @@ pre {
       }
 
       value = value
-        .replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\mathbf\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\mathit\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\text\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\(?:mathrm|mathbf|mathit|mathsf|mathsfit|text|textrm|textsf)\s*\{\s*([^{}]+?)\s*\}/g, (match, inner) => {
+          return this.normalizeMathTokenText(inner);
+        })
         .replace(/\\mathcal\s*\{\s*([A-Za-z])\s*\}/g, (match, letter) => this.mathcalSymbol(letter))
+        .replace(/_\s*\{\s*\}/g, "")
         .replace(/\\times/g, "&times;")
         .replace(/\\cdot/g, "&middot;")
         .replace(/\\pm/g, "&plusmn;")
-        .replace(/\\circ/g, "&deg;")
+        .replace(/\\circ/g, "\u00B0")
         .replace(/\\%/g, "%")
         .replace(/\\lambda/g, "&lambda;")
         .replace(/\\mu/g, "&mu;")
@@ -1855,7 +2630,14 @@ pre {
         .replace(/\\alpha/g, "&alpha;")
         .replace(/\\beta/g, "&beta;")
         .replace(/\\epsilon|\\varepsilon/g, "&epsilon;")
-        .replace(/\\Delta/g, "&Delta;");
+        .replace(/\\Delta/g, "&Delta;")
+        .replace(/\\\s*([A-Za-z]+)/g, (match, command) => {
+          return this.normalizeMathTokenText(command);
+        });
+
+      value = value
+        .replace(/\^\s*\u00B0/g, "\u00B0")
+        .replace(/\s*\u00B0\s*C\b/g, "\u00B0C");
 
       value = value.replace(/([A-Za-z0-9&;]+)\s*_\s*\{\s*([^{}]+?)\s*\}/g, (match, base, subscript) => {
         return `${base}<sub>${this.cleanScriptText(subscript)}</sub>`;
@@ -1866,24 +2648,47 @@ pre {
       value = value.replace(/\^\s*\{\s*([^{}]+?)\s*\}/g, (match, superscript) => {
         return `<sup>${this.cleanScriptText(superscript)}</sup>`;
       });
+      value = value.replace(/\{\s*([^{}]+?)\s*\}/g, "$1");
 
       if (/[\\{}]/.test(value)) {
         return "";
       }
+      value = this.normalizeSpacedScientificUnits(value);
       return value
         .replace(/\s+/g, " ")
+        .replace(/\s*\/\s*/g, "/")
+        .replace(/\s*\u00B0\s*C\b/g, "\u00B0C")
         .replace(/\s+([,;:)])/g, "$1")
         .replace(/\s+\.(?!\d)/g, ".")
         .replace(/([(])\s+/g, "$1")
         .trim();
     },
 
+    normalizeSpacedScientificUnits(text) {
+      return String(text || "")
+        .replace(/\b(\d(?:\s+\d){1,8})(?=\s*(?:M\s*P\s*a|MPa|k\s*J|kJ|c\s*m|cm|m\s*m|mm|\u00B0?\s*C|%|\/))/gi, digits => digits.replace(/\s+/g, ""))
+        .replace(/\b(\d(?:\s+\d){1,8})\b(?=\s*(?:<sup>|&times;|\u00D7|x\s*\d))/gi, digits => digits.replace(/\s+/g, ""))
+        .replace(/\bM\s*P\s*a\b/gi, "MPa")
+        .replace(/\bk\s*J\b/g, "kJ")
+        .replace(/\bc\s*m\b/gi, "cm")
+        .replace(/\bm\s*m\b/gi, "mm")
+        .replace(/\s*\/\s*(?=(?:cm|mm|m|s)\b)/gi, "/")
+        .replace(/\b(kJ|J|MPa|GPa|Pa|N|W|kW)\s*\/\s*(cm|mm|m|s)\b/g, "$1/$2")
+        .replace(/(\d)\s+(?=(?:kJ|J|MPa|GPa|Pa|cm|mm|m|s|\u00B0C|%)(?:\b|\/))/g, "$1 ")
+        .replace(/(\d)\s+\u00B0\s*C\b/g, "$1\u00B0C")
+        .replace(/\u00B0\s*C\b/g, "\u00B0C");
+    },
+
+    normalizeMathTokenText(text) {
+      return this.normalizeSpacedScientificUnits(String(text || ""))
+        .replace(/\s+/g, "")
+        .replace(/Mpa/gi, "MPa")
+        .replace(/KJ/g, "kJ");
+    },
+
     cleanScriptText(text) {
       return text
-        .replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\mathbf\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\mathit\s*\{\s*([^{}]+?)\s*\}/g, "$1")
-        .replace(/\\text\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\(?:mathrm|mathbf|mathit|mathsf|mathsfit|text|textrm|textsf)\s*\{\s*([^{}]+?)\s*\}/g, (match, inner) => this.normalizeMathTokenText(inner))
         .replace(/\\mathcal\s*\{\s*([A-Za-z])\s*\}/g, (match, letter) => this.mathcalSymbol(letter))
         .replace(/\s+/g, "")
         .replace(/MMR/i, "MMR")
@@ -2309,6 +3114,19 @@ pre {
 
     safeFileName(name) {
       return String(name).replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_").slice(0, 120) || "mineru";
+    },
+
+    normalizeMinerUFileName(name) {
+      let trimmed = String(name || "").trim() || "document.pdf";
+      let extMatch = trimmed.match(/(\.[A-Za-z0-9]+)$/);
+      let ext = (extMatch?.[1] || ".pdf").toLowerCase();
+      let base = extMatch ? trimmed.slice(0, -extMatch[1].length) : trimmed;
+      let normalized = base
+        .replace(/[^\x20-\x7E]/g, "_")
+        .replace(/[^A-Za-z0-9._-]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      return `${normalized || "document"}${ext}`;
     },
 
     uuid() {

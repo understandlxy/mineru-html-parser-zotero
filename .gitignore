@@ -1,5 +1,6 @@
 dist/
 __install_probe/
+full-text-translate/
 *.xpi
 *.zip
 .DS_Store
