@@ -3,8 +3,8 @@
     "mineru-html@example.com": {
       "updates": [
         {
-          "version": "0.1.50",
-          "update_link": "https://github.com/understandlxy/mineru-html-parser-zotero/releases/download/v0.1.50/mineru-html-parser-0.1.50.xpi",
+          "version": "0.1.64",
+          "update_link": "https://github.com/understandlxy/mineru-html-parser-zotero/releases/download/v0.1.64/mineru-html-parser-0.1.64.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "8.0",

@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a readable HTML attachment through the MinerU precise parsing API. After parsing succeeds, the plugin imports the generated HTML back to Zotero and opens it automatically.
 
-[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
+[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.64.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
 
 ## Features
 
@@ -24,7 +24,7 @@ MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a read
 ### Install From GitHub Release
 
 1. Open the [latest release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest).
-2. Download `mineru-html-parser-0.1.50.xpi`.
+2. Download `mineru-html-parser-0.1.64.xpi`.
 3. Open Zotero.
 4. Go to `Tools -> Plugins`.
 5. Open the gear menu and choose `Install Add-on From File...`.

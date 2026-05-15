@@ -4,7 +4,7 @@ pref("extensions.mineru-html.enableFormula", true);
 pref("extensions.mineru-html.enableTable", true);
 pref("extensions.mineru-html.isOCR", false);
 pref("extensions.mineru-html.pollIntervalSeconds", 5);
-pref("extensions.mineru-html.maxPollSeconds", 100);
+pref("extensions.mineru-html.maxPollSeconds", 200);
 pref("extensions.mineru-html.apiTokenFallback", "");
 pref("extensions.mineru-html.postprocessHTML", true);
 pref("extensions.mineru-html.cleanupSimpleLatex", true);

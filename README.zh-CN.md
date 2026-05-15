@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU 精准解析 API，下载解析结果中的 HTML，自动挂回 Zotero 条目，并在解析完成后直接打开生成的 HTML。
 
-[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
+[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.64.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
 
 ## 功能
 
@@ -24,7 +24,7 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 ### 从 GitHub Release 安装
 
 1. 打开 [最新版 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)。
-2. 下载 `mineru-html-parser-0.1.50.xpi`。
+2. 下载 `mineru-html-parser-0.1.64.xpi`。
 3. 打开 Zotero。
 4. 进入 `Tools -> Plugins`。
 5. 点击齿轮菜单，选择 `Install Add-on From File...`。

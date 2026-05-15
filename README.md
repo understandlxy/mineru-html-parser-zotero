@@ -6,7 +6,7 @@ Submit a Zotero PDF attachment to the MinerU precise parsing API, import the gen
 
 ## Download
 
-- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi)
+- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.64.xpi)
 - [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)
 - [MinerU API Docs](https://mineru.net/apiManage/docs)
 

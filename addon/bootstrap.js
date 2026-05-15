@@ -28,7 +28,7 @@ async function startup({ id, version, rootURI }) {
     MAX_PAGES: 200,
     FIXED_PREFS: {
       pollIntervalSeconds: 5,
-      maxPollSeconds: 100,
+      maxPollSeconds: 200,
       enableFormula: true,
       enableTable: true,
       isOCR: false,
@@ -579,9 +579,14 @@ async function startup({ id, version, rootURI }) {
 
     async pollResult({ token, batchID, dataID, fileName, progress }) {
       let intervalSeconds = this.pref("pollIntervalSeconds", 5);
-      let maxPollSeconds = this.pref("maxPollSeconds", 100);
+      let maxPollSeconds = this.pref("maxPollSeconds", 200);
       let deadline = Date.now() + maxPollSeconds * 1000;
       let started = Date.now();
+      let updatePollingProgress = state => {
+        let elapsedSeconds = Math.floor((Date.now() - started) / 1000);
+        let percent = Math.min(75, 35 + Math.floor((elapsedSeconds / maxPollSeconds) * 40));
+        progress?.update(`MinerU 状态：${this.translateMinerUState(state)}，已等待 ${elapsedSeconds}/${maxPollSeconds} 秒`, percent);
+      };
 
       while (Date.now() < deadline) {
         let json = await this.fetchJSON(`${this.API_BASE}/extract-results/batch/${encodeURIComponent(batchID)}`, {
@@ -612,10 +617,12 @@ async function startup({ id, version, rootURI }) {
           throw new Error(`MinerU returned unknown task state: ${state || "empty"}.`);
         }
 
-        let elapsedSeconds = Math.floor((Date.now() - started) / 1000);
-        let percent = Math.min(75, 35 + Math.floor((elapsedSeconds / maxPollSeconds) * 40));
-        progress?.update(`MinerU 状态：${this.translateMinerUState(state)}，已等待 ${elapsedSeconds}s`, percent);
-        await Zotero.Promise.delay(intervalSeconds * 1000);
+        updatePollingProgress(state);
+        let nextPollAt = Math.min(Date.now() + intervalSeconds * 1000, deadline);
+        while (Date.now() < nextPollAt) {
+          await Zotero.Promise.delay(Math.min(1000, nextPollAt - Date.now()));
+          updatePollingProgress(state);
+        }
       }
 
       throw new Error(`MinerU parsing did not finish within ${maxPollSeconds} seconds.`);
@@ -685,6 +692,7 @@ async function startup({ id, version, rootURI }) {
       let updated = this.runPostprocessStep(report, "injectReadableStyles", html, value => this.injectReadableStyles(value));
       if (this.pref("suppressFigureOCRText", true)) {
         updated = this.runPostprocessStep(report, "suppressFigureOCRText", updated, value => this.suppressFigureOCRText(value));
+        updated = this.runPostprocessStep(report, "removeLooseFigureOCRFragments", updated, value => this.removeLooseFigureOCRFragments(value));
       }
       updated = this.runPostprocessStep(report, "centerSubfigureCaptions", updated, value => this.centerSubfigureCaptions(value));
       updated = this.runPostprocessStep(report, "normalizeSubfigureCaptionList", updated, value => this.normalizeSubfigureCaptionList(value));
@@ -695,11 +703,19 @@ async function startup({ id, version, rootURI }) {
       updated = this.runPostprocessStep(report, "splitLooseCaptionImageParagraphs", updated, value => this.splitLooseCaptionImageParagraphs(value));
       updated = this.runPostprocessStep(report, "splitCaptionParagraphImages", updated, value => this.splitCaptionParagraphImages(value));
       updated = this.runPostprocessStep(report, "splitImageCaptionParagraphs", updated, value => this.splitImageCaptionParagraphs(value));
+      updated = this.runPostprocessStep(report, "closeCaptionParagraphsBeforeImages", updated, value => this.closeCaptionParagraphsBeforeImages(value));
       updated = this.runPostprocessStep(report, "wrapBareFigureCaptionLines", updated, value => this.wrapBareFigureCaptionLines(value));
       updated = this.runPostprocessStep(report, "demoteFigureReferenceParagraphs", updated, value => this.demoteFigureReferenceParagraphs(value));
       updated = this.runPostprocessStep(report, "markFigureAndTableCaptions", updated, value => this.markFigureAndTableCaptions(value));
+      updated = this.runPostprocessStep(report, "demoteFigureReferenceParagraphsAfterCaptions", updated, value => this.demoteFigureReferenceParagraphs(value));
+      if (this.pref("suppressFigureOCRText", true)) {
+        updated = this.runPostprocessStep(report, "removeLooseFigureOCRFragmentsAfterCaptions", updated, value => this.removeLooseFigureOCRFragments(value));
+      }
+      updated = this.runPostprocessStep(report, "demoteNarrativeTableLeadIns", updated, value => this.demoteNarrativeTableLeadIns(value));
+      updated = this.runPostprocessStep(report, "normalizeCaptionMathOCR", updated, value => this.normalizeCaptionMathOCR(value));
       if (this.pref("cleanupSimpleLatex", true)) {
         updated = this.runPostprocessStep(report, "cleanupSimpleLatex", updated, value => this.cleanupSimpleLatex(value));
+        updated = this.runPostprocessStep(report, "normalizePlainTableMathNotation", updated, value => this.normalizePlainTableMathNotation(value));
       }
 
       if (updated !== html) {
@@ -715,8 +731,11 @@ async function startup({ id, version, rootURI }) {
     },
 
     createPostprocessReport({ htmlPath, sourceFileName, dataID, originalHTML }) {
+      let createdAt = new Date().toISOString();
       return {
-        createdAt: new Date().toISOString(),
+        createdAt,
+        parsedAt: createdAt,
+        pluginVersion: this.version || "",
         sourceFileName: sourceFileName || "",
         dataID: dataID || "",
         htmlPath,
@@ -777,7 +796,9 @@ async function startup({ id, version, rootURI }) {
       let addedFigures = report.final.figureNumbers.filter(number => !beforeNumbers.has(number));
       let lines = [
         "MinerU HTML Parser postprocess report",
-        `Created at: ${report.createdAt}`,
+        `Plugin version: ${report.pluginVersion || "(unknown)"}`,
+        `Parsed at: ${report.parsedAt || report.createdAt}`,
+        `Report created at: ${report.createdAt}`,
         `Source PDF: ${report.sourceFileName}`,
         `MinerU data_id: ${report.dataID}`,
         `HTML path: ${report.htmlPath}`,
@@ -808,9 +829,6 @@ async function startup({ id, version, rootURI }) {
 
     injectReadableStyles(html) {
       let marker = "mineru-html-parser-readable";
-      if (html.includes(marker)) {
-        return html;
-      }
       let paragraphAlignment = this.pref("justifyText", true)
         ? "text-align: justify !important;\n  text-justify: inter-word !important;"
         : "text-align: left !important;";
@@ -839,18 +857,44 @@ table p, table li, pre, code {
   text-align: left !important;
 }
 table {
-  display: block !important;
+  display: table !important;
   width: max-content !important;
   max-width: 100% !important;
   overflow-x: auto !important;
+  border-collapse: collapse !important;
   table-layout: auto !important;
   font-size: 0.95em !important;
-  margin: 1.25em auto !important;
+  line-height: 1.35 !important;
+  margin: 1.35em auto 0.7em auto !important;
+  border-top: 2px solid #111 !important;
+  border-bottom: 2px solid #111 !important;
+  background: transparent !important;
 }
 table td, table th {
   min-width: 4.5em !important;
   vertical-align: top !important;
   white-space: normal !important;
+  border: 0 !important;
+  border-bottom: 1px solid #d6d6d6 !important;
+  padding: 0.38em 0.95em !important;
+  background: transparent !important;
+}
+table tbody tr:first-child td,
+table thead th {
+  font-weight: 700 !important;
+  text-align: center !important;
+  border-bottom: 1.5px solid #333 !important;
+}
+table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+table td:first-child,
+table th:first-child {
+  text-align: left !important;
+}
+table td:not(:first-child),
+table th:not(:first-child) {
+  text-align: center !important;
 }
 img, svg {
   display: block !important;
@@ -873,6 +917,16 @@ p.mineru-table-caption {
   font-weight: 650 !important;
   margin: 0.45em auto 1.2em auto !important;
 }
+.mineru-inline-math {
+  font-family: "Times New Roman", "Cambria Math", serif !important;
+  font-style: italic !important;
+  white-space: nowrap !important;
+}
+.mineru-inline-math sup,
+.mineru-inline-math sub {
+  font-style: normal !important;
+  line-height: 0 !important;
+}
 pre {
   white-space: pre-wrap !important;
 }
@@ -884,6 +938,9 @@ pre {
 }
 </style>`;
 
+      if (html.includes(marker)) {
+        return html.replace(new RegExp(`<style\\s+id=["']${marker}["'][\\s\\S]*?<\\/style>`, "i"), style);
+      }
       if (html.includes("</head>")) {
         return html.replace("</head>", `${style}\n</head>`);
       }
@@ -924,6 +981,16 @@ pre {
         index--;
       }
       return output.join("\n");
+    },
+
+    removeLooseFigureOCRFragments(html) {
+      let looseImageOCRFragment = "(?:this\\s+image\\s+may\\s+contain\\s+)?(?:text\\s+or\\s+symbols?|or\\s+symbols?|symbols?|text)\\)?";
+      let imageParagraph = "(<p\\b[^>]*>\\s*<img\\b[^>]*>\\s*<\\/p>\\s*)";
+      let captionParagraph = "(\\s*<p\\b(?:[^>]*class=[\"'][^\"']*mineru-(?:figure|table)-caption[^\"']*[\"'][^>]*|(?=[^>]*>\\s*(?:Figure|Table)\\s*\\d+\\s*[.:])[^>]*)>)";
+      return html.replace(
+        new RegExp(`${imageParagraph}\\s*${looseImageOCRFragment}\\s*${captionParagraph}`, "gi"),
+        "$1$2"
+      );
     },
 
     isNoisyCaptionLabelBeforeCaption(line, nextLine, followingLine) {
@@ -1062,7 +1129,7 @@ pre {
 
       html = html.replace(/<p(?![^>]*\bclass=)([^>]*)>((?:(?!<p\b|<\/p>)[\s\S])*)<\/p>\s*(?=<table\b)/gi, (match, attrs, inner) => {
         let text = this.plainText(inner).replace(/\s+/g, " ").trim();
-        if (!this.isTableCaptionText(text)) {
+        if (!this.isTableCaptionText(text) && !this.isLooseTableCaptionBeforeTable(text)) {
           return match;
         }
         return `<p class="mineru-table-caption"${attrs}>${inner}</p>`;
@@ -1070,10 +1137,13 @@ pre {
 
       return html.replace(/<p(?![^>]*\bclass=)([^>]*)>((?:(?!<p\b|<\/p>)[\s\S])*)<\/p>/gi, (match, attrs, inner) => {
         let text = this.plainText(inner).replace(/\s+/g, " ").trim();
-        if (!this.isFigureCaptionText(text)) {
-          return match;
+        if (this.isFigureCaptionText(text)) {
+          return `<p class="mineru-figure-caption"${attrs}>${inner}</p>`;
         }
-        return `<p class="mineru-figure-caption"${attrs}>${inner}</p>`;
+        if (this.isTableCaptionText(text)) {
+          return `<p class="mineru-table-caption"${attrs}>${inner}</p>`;
+        }
+        return match;
       });
     },
 
@@ -1139,6 +1209,18 @@ pre {
       });
     },
 
+    closeCaptionParagraphsBeforeImages(html) {
+      return html.replace(/<p(?![^>]*\bclass=)([^>]*)>((?:(?!<p\b|<\/p>|<img\b)[\s\S])*?)(?=\s*<p\b[^>]*>\s*<img\b)/gi, (match, attrs, captionHTML) => {
+        let text = this.plainText(captionHTML).replace(/\s+/g, " ").trim();
+        if (!this.isFigureCaptionText(text) && !this.isTableCaptionText(text)) {
+          return match;
+        }
+        let captionClass = this.isFigureCaptionText(text) ? "mineru-figure-caption" : "mineru-table-caption";
+        let captionText = captionClass === "mineru-figure-caption" ? this.repairFigureCaptionText(text) : text;
+        return `<p class="${captionClass}"${attrs}>${this.escapeHTML(captionText)}</p>\n`;
+      });
+    },
+
     wrapBareFigureCaptionLines(html) {
       let lines = html.split(/\r?\n/);
       let output = [];
@@ -1184,6 +1266,17 @@ pre {
       });
     },
 
+    demoteNarrativeTableLeadIns(html) {
+      return html.replace(/<p([^>]*\bclass\s*=\s*(["'])(?=[^"']*\bmineru-table-caption\b)([^"']*)\2[^>]*)>((?:(?!<p\b|<\/p>)[\s\S])*)<\/p>(\s*<table\b)/gi, (match, attrs, quote, classValue, inner, tableStart) => {
+        let text = this.plainText(inner).replace(/\s+/g, " ").trim();
+        if (/^(?:[a-z]\.\s*)?table\s*\d+\b/i.test(text)) {
+          return match;
+        }
+        let cleanedAttrs = this.removeClassFromAttributes(attrs, "mineru-table-caption");
+        return `<p${cleanedAttrs}>${inner}</p>${tableStart}`;
+      });
+    },
+
     removeClassFromAttributes(attrs, className) {
       return String(attrs || "").replace(/\sclass\s*=\s*(["'])([^"']*)\1/i, (match, quote, classValue) => {
         let remaining = classValue
@@ -1220,6 +1313,10 @@ pre {
 
     isFigureReferenceParagraphText(text) {
       let value = String(text || "").trim();
+      let referenceLead = value.match(/^(?:fig\.|figure)\s*\d+(?:\s*(?:and|,)\s*(?:fig\.|figure|table)\s*\d+)?\s+(?:(?:clearly|also|further|mainly|generally|schematically|respectively)\s+)?([A-Za-z][A-Za-z-]*)\b/i);
+      if (referenceLead && /^(?:is|are|was|were|shows?|illustrates?|presents?|presented|demonstrates?|indicates?|reveals?|suggests?|confirms?|compares?|describes?|displays?|reports?|summari[sz]es?|elucidates?|depicts?|provides?|gives?|lists?)$/i.test(referenceLead[1])) {
+        return true;
+      }
       if (/^(?:fig\.|figure)\s*\d+(?:(?:\s*[\(\[]?\s*[a-z0-9]+\s*[\)\]]?)(?:\s*(?:-|\u2013|\u2014|to)\s*[\(\[]?\s*[a-z0-9]+\s*[\)\]]?)?(?:\s*(?:,|and)\s*[\(\[]?\s*[a-z0-9]+\s*[\)\]]?)*)?\s+(?:clearly|also|further|mainly|generally|schematically|respectively\s+)?(?:is|are|was|were|shows?|illustrates?|presents?|presented|demonstrates?|indicates?|reveals?|suggests?|confirms?|compares?|describes?|displays?|reports?|summari[sz]es?)\b/i.test(value)) {
         return true;
       }
@@ -1241,16 +1338,36 @@ pre {
     },
 
     isTableCaptionText(text) {
-      if (!text || text.length > 180) {
+      if (!text) {
         return false;
       }
-      if (/^(?:[a-z]\.\s*)?(table)\s*\d+\b/i.test(text)) {
+      if (/^(?:[a-z]\.\s*)?(table)\s*\d+\s*[.:](?=\s|$)/i.test(text)) {
         return true;
+      }
+      if (text.length > 180) {
+        return false;
+      }
+      if (/\b(?:we|our|this|these|those)\b/i.test(text)) {
+        return false;
       }
       if (/[.!?]\s+[A-Z]/.test(text)) {
         return false;
       }
       return /(\bcomposition\b|\bparameters?\b|\bproperties\b|\bresults?\b|\bspacing\b|\bcontent\b|\bvalues?\b|\bdimensions?\b|\bconditions?\b)/i.test(text);
+    },
+
+    isLooseTableCaptionBeforeTable(text) {
+      let value = String(text || "").replace(/\s+/g, " ").trim();
+      if (!value || value.length > 220) {
+        return false;
+      }
+      if (!/^(?:[a-z]\.\s*)?table\s*\d+\s+\S/i.test(value)) {
+        return false;
+      }
+      if (/[.!?]\s+[A-Z]/.test(value)) {
+        return false;
+      }
+      return /\b(?:details?|composition|parameters?|properties|results?|spacing|content|values?|dimensions?|conditions?|characteristics?|summary|comparison|data)\b/i.test(value);
     },
 
     parseSubfigureListItem(olAttrs, itemHTML) {
@@ -1510,7 +1627,22 @@ pre {
       if (/^`{2,}$/.test(value)) {
         return true;
       }
+      if (/^(?:this\s+image\s+may\s+contain\s+)?(?:text\s+or\s+symbols?|or\s+symbols?|symbols?|text)\)?$/i.test(value)) {
+        return true;
+      }
+      if (/^labels?\.?$/i.test(value)) {
+        return true;
+      }
+      if (
+        /\b(?:kernel\s+aver\.?|misorient\.?|misorien\.?|misorientation|kam|ipf)\b/i.test(value)
+        && /(?:\b\d+\s*(?:µm|μm|um)\b|\(\+\)|[<>]\s*\d+|\b\d+\s*(?:°|º|掳|◦))/i.test(value)
+      ) {
+        return true;
+      }
       if (this.pipeCount(value) >= 2 && this.numericTokenCount(value) >= 2) {
+        return true;
+      }
+      if (/^\|\s*[~<>+\-]?\s*\d+(?:\.\d+)?\s*(?:(?:-|~)\s*\d+(?:\.\d+)?)?\s*(?:%|mm|cm|\u00B5m|\u03BCm|um|MPa|kJ\/mm)?\s*\|$/i.test(value)) {
         return true;
       }
       let normalized = value.toLowerCase();
@@ -1630,6 +1762,53 @@ pre {
         .replace(/>/g, "&gt;");
     },
 
+    escapeRegExp(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    },
+
+    normalizeCaptionMathOCR(html) {
+      return html.replace(/(<(?:p|figcaption)\b[^>]*class="[^"]*\bmineru-(?:(?:figure|table)-caption|subcaption)\b[^"]*"[^>]*>)([\s\S]*?)(<\/(?:p|figcaption)>)/gi, (match, open, content, close) => {
+        return open + this.normalizeCaptionMathText(content) + close;
+      });
+    },
+
+    normalizeCaptionMathText(content) {
+      if (!/[\uD835\uDC9F]|\\mathcal/.test(content)) {
+        return content;
+      }
+
+      let normalized = content
+        .replace(/\uD835\uDC9F\s*(t\s*a\s*r|a\s*u\s*x)(?=\s|[,.;:)]|\||$)/gi, (match, script) => {
+          return this.datasetFormulaHTML(script);
+        })
+        .replace(/(?:\{\s*)?\\mathcal\s*\{\s*D\s*\}\s*(?:\}\s*)?\^\s*\{\s*\\mathrm\s*\{\s*([A-Za-z\s]{3,9})\s*\}\s*\}/g, (match, script) => {
+          return this.datasetFormulaHTML(script) || match;
+        })
+        .replace(/(?:\{\s*)?\\mathcal\s*\{\s*D\s*\}\s*(?:\}\s*)?\^\s*\{\s*([A-Za-z\s]{3,9})\s*\}/g, (match, script) => {
+          return this.datasetFormulaHTML(script) || match;
+        })
+        .replace(/\b\d(?:\s+\d){1,8}\b/g, digits => digits.replace(/\s+/g, ""));
+
+      for (let kind of ["tar", "aux"]) {
+        let span = this.escapeRegExp(this.datasetFormulaHTML(kind));
+        normalized = normalized
+          .replace(new RegExp(`(\\|\\s*${span}\\s*\\|\\s*=\\s*(\\d+))(?:\\s+\\|\\s*${span}\\s*\\|\\s*=\\s*\\2)+`, "g"), "$1")
+          .replace(new RegExp(`(${span})(?:\\s+${span})+`, "g"), "$1");
+      }
+
+      return normalized
+        .replace(/\s+([,.;:])/g, "$1")
+        .trim();
+    },
+
+    datasetFormulaHTML(script) {
+      let kind = String(script || "").replace(/\s+/g, "").toLowerCase();
+      if (!["tar", "aux"].includes(kind)) {
+        return "";
+      }
+      return `<span class="mineru-inline-math mineru-dataset" data-dataset="${kind}">&#x1D49F;<sup>${kind}</sup></span>`;
+    },
+
     cleanupSimpleLatex(html) {
       return html.replace(/\$([^$\n]{1,120})\$/g, (match, expression) => {
         let cleaned = this.cleanLatexExpression(expression);
@@ -1637,10 +1816,21 @@ pre {
       });
     },
 
+    normalizePlainTableMathNotation(html) {
+      return html.replace(/<td>\s*([A-Za-z])_([A-Za-z](?:,?[A-Za-z]){0,5})\s*<\/td>/g, (match, base, subscript) => {
+        return `<td><span class="mineru-inline-math">${base}<sub>${subscript}</sub></span></td>`;
+      });
+    },
+
     cleanLatexExpression(expression) {
       let value = expression.trim();
       if (!value || /[<>]/.test(value)) {
         return "";
+      }
+      let underline = value.match(/^\\underline\s*\{\s*([\s\S]+?)\s*\}$/);
+      if (underline) {
+        let cleanedUnderline = this.cleanLatexExpression(underline[1]);
+        return cleanedUnderline ? `<u class="mineru-inline-math">${cleanedUnderline}</u>` : "";
       }
       if (/\\(frac|partial|nabla|begin|end|left|right|sqrt|overrightarrow|tag|sum|int|lim)\b/.test(value)) {
         return "";
@@ -1650,11 +1840,15 @@ pre {
         .replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, "$1")
         .replace(/\\mathbf\s*\{\s*([^{}]+?)\s*\}/g, "$1")
         .replace(/\\mathit\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\text\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\mathcal\s*\{\s*([A-Za-z])\s*\}/g, (match, letter) => this.mathcalSymbol(letter))
         .replace(/\\times/g, "&times;")
         .replace(/\\cdot/g, "&middot;")
         .replace(/\\pm/g, "&plusmn;")
         .replace(/\\circ/g, "&deg;")
         .replace(/\\%/g, "%")
+        .replace(/\\lambda/g, "&lambda;")
+        .replace(/\\mu/g, "&mu;")
         .replace(/\\sigma/g, "&sigma;")
         .replace(/\\rho/g, "&rho;")
         .replace(/\\eta/g, "&eta;")
@@ -1678,7 +1872,8 @@ pre {
       }
       return value
         .replace(/\s+/g, " ")
-        .replace(/\s+([,.;:)])/g, "$1")
+        .replace(/\s+([,;:)])/g, "$1")
+        .replace(/\s+\.(?!\d)/g, ".")
         .replace(/([(])\s+/g, "$1")
         .trim();
     },
@@ -1687,11 +1882,27 @@ pre {
       return text
         .replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, "$1")
         .replace(/\\mathbf\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\mathit\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\text\s*\{\s*([^{}]+?)\s*\}/g, "$1")
+        .replace(/\\mathcal\s*\{\s*([A-Za-z])\s*\}/g, (match, letter) => this.mathcalSymbol(letter))
         .replace(/\s+/g, "")
+        .replace(/MMR/i, "MMR")
+        .replace(/\\lambda/g, "&lambda;")
+        .replace(/\\mu/g, "&mu;")
         .replace(/\\sigma/g, "&sigma;")
         .replace(/\\eta/g, "&eta;")
         .replace(/\\alpha/g, "&alpha;")
         .replace(/\\beta/g, "&beta;");
+    },
+
+    mathcalSymbol(letter) {
+      let symbols = {
+        D: "&#x1D49F;",
+        X: "&#x1D4B3;",
+        Y: "&#x1D4B4;",
+        Z: "&#x1D4B5;"
+      };
+      return symbols[String(letter || "").toUpperCase()] || letter;
     },
 
     async attachHTML({ htmlPath, pdfItem, parentItem }) {
@@ -1957,20 +2168,65 @@ pre {
       }
 
       try {
+        let title = headline || "MinerU HTML Parser";
         let win = new Zotero.ProgressWindow({ closeOnClick: true });
-        win.changeHeadline(headline || "MinerU HTML Parser");
+        win.changeHeadline(title);
         win.show();
         let tick = "chrome://zotero/skin/tick.png";
         let cross = "chrome://zotero/skin/cross.png";
         let current = null;
         let lastMessage = "";
+        let styleWindow = () => {
+          try {
+            let doc = win._window?.document || win.window?.document || win.document;
+            if (!doc) {
+              return;
+            }
+            let root = doc.documentElement;
+            root.style.border = "0";
+            root.style.boxShadow = "0 8px 22px rgba(0, 0, 0, 0.16)";
+            root.style.background = "transparent";
+            for (let node of doc.querySelectorAll("window, body, panel, .progress-window, #progress-window")) {
+              node.style.border = "0";
+              node.style.outline = "0";
+              node.style.boxShadow = "none";
+              node.style.backgroundClip = "padding-box";
+            }
+          }
+          catch (_) {}
+        };
+        let setItemText = message => {
+          if (!current) {
+            current = new win.ItemProgress(tick, message);
+          }
+          else if (typeof current.setText === "function") {
+            current.setText(message);
+          }
+          else if (current._itemText) {
+            current._itemText.textContent = message;
+          }
+          else if (current.itemText) {
+            current.itemText.textContent = message;
+          }
+          else if (message !== lastMessage) {
+            win.changeHeadline(`${title} - ${message}`);
+          }
+          lastMessage = message;
+          styleWindow();
+        };
+        let setItemIcon = icon => {
+          if (current && typeof current.setIcon === "function") {
+            current.setIcon(icon);
+          }
+        };
+        styleWindow();
 
         return {
           step(message, percent = 0) {
             try {
-              current = new win.ItemProgress(tick, message);
+              setItemText(message);
+              setItemIcon(tick);
               current.setProgress(Math.max(0, Math.min(100, percent)));
-              lastMessage = message;
             }
             catch (error) {
               log(`Progress step failed: ${error}`);
@@ -1979,10 +2235,8 @@ pre {
 
           update(message, percent = 0) {
             try {
-              if (!current || message !== lastMessage) {
-                current = new win.ItemProgress(tick, message);
-                lastMessage = message;
-              }
+              setItemText(message);
+              setItemIcon(tick);
               current.setProgress(Math.max(0, Math.min(100, percent)));
             }
             catch (error) {
@@ -1992,7 +2246,8 @@ pre {
 
           success(message) {
             try {
-              current = new win.ItemProgress(tick, message);
+              setItemText(message);
+              setItemIcon(tick);
               current.setProgress(100);
               win.startCloseTimer(5000);
             }
@@ -2003,7 +2258,8 @@ pre {
 
           error(message) {
             try {
-              current = new win.ItemProgress(cross, message);
+              setItemText(message);
+              setItemIcon(cross);
               current.setProgress(100);
               win.startCloseTimer(12000);
             }
