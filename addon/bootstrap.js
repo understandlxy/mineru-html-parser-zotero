@@ -475,14 +475,20 @@ async function startup({ id, version, rootURI }) {
         let parseResult = await this.parsePDFToHTML({ filePath, token, pdfItem: target.pdfItem, progress });
         let htmlPath = parseResult.htmlPath || parseResult;
         progress?.step("正在导入 HTML 附件...", 92);
-        await this.attachHTML({ htmlPath, pdfItem: target.pdfItem, parentItem: target.parentItem });
+        let htmlAttachment = await this.attachHTML({ htmlPath, pdfItem: target.pdfItem, parentItem: target.parentItem });
         if (parseResult.reportPath) {
           progress?.step("Importing MinerU postprocess report...", 96);
           await this.attachPostprocessReport({ reportPath: parseResult.reportPath, pdfItem: target.pdfItem, parentItem: target.parentItem });
         }
-        progress?.success("解析完成，HTML 已附加到当前条目。");
+        progress?.step("Opening generated HTML...", 98);
+        let opened = await this.openAttachmentInZotero(htmlAttachment);
+        progress?.success(opened
+          ? "解析完成，HTML 已附加到当前条目并打开。"
+          : "解析完成，HTML 已附加到当前条目。");
         if (!progress) {
-          this.alert("MinerU parsing finished. The generated HTML and postprocess report were attached to the Zotero item.");
+          this.alert(opened
+            ? "MinerU parsing finished. The generated HTML was attached to the Zotero item and opened."
+            : "MinerU parsing finished. The generated HTML and postprocess report were attached to the Zotero item.");
         }
       }
       catch (error) {
@@ -1690,12 +1696,12 @@ pre {
 
     async attachHTML({ htmlPath, pdfItem, parentItem }) {
       let title = `${this.basename(await pdfItem.getFilePathAsync()).replace(/\.pdf$/i, "")}.mineru.html`;
-      await this.attachFile({ filePath: htmlPath, title, contentType: "text/html", pdfItem, parentItem });
+      return await this.attachFile({ filePath: htmlPath, title, contentType: "text/html", pdfItem, parentItem });
     },
 
     async attachPostprocessReport({ reportPath, pdfItem, parentItem }) {
       let title = `${this.basename(await pdfItem.getFilePathAsync()).replace(/\.pdf$/i, "")}.mineru-postprocess.txt`;
-      await this.attachFile({ filePath: reportPath, title, contentType: "text/plain", pdfItem, parentItem });
+      return await this.attachFile({ filePath: reportPath, title, contentType: "text/plain", pdfItem, parentItem });
     },
 
     async attachFile({ filePath, title, contentType, pdfItem, parentItem }) {
@@ -1715,11 +1721,36 @@ pre {
       }
 
       try {
-        await Zotero.Attachments.importFromFile(options);
+        return await Zotero.Attachments.importFromFile(options);
       }
       catch (error) {
         options.file = filePath;
-        await Zotero.Attachments.importFromFile(options);
+        return await Zotero.Attachments.importFromFile(options);
+      }
+    },
+
+    async openAttachmentInZotero(attachment) {
+      if (!attachment?.id) {
+        log("Generated HTML attachment was imported, but no attachment item was returned to open.");
+        return false;
+      }
+
+      try {
+        let pane = Zotero.getActiveZoteroPane?.();
+        if (!pane?.viewAttachment) {
+          let win = Services.wm.getMostRecentWindow("navigator:browser");
+          pane = win?.ZoteroPane;
+        }
+        if (!pane?.viewAttachment) {
+          log("ZoteroPane.viewAttachment is unavailable; generated HTML will remain attached but unopened.");
+          return false;
+        }
+        await pane.viewAttachment(attachment.id);
+        return true;
+      }
+      catch (error) {
+        log(`Failed to open generated HTML attachment: ${error?.stack || error}`);
+        return false;
       }
     },
 

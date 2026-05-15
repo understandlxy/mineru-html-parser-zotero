@@ -1,15 +1,18 @@
 # MinerU HTML Parser for Zotero
 
-Parse Zotero PDF attachments with the MinerU precise parsing API and attach the generated HTML back to the Zotero item.
+Submit a Zotero PDF attachment to the MinerU precise parsing API, import the generated HTML back into Zotero, and open the HTML attachment automatically when parsing finishes.
 
-把 Zotero PDF 附件提交给 MinerU 精准解析 API，并把生成的 HTML 自动附加回 Zotero 条目。
-
-## Documentation
-
-- [简体中文](README.zh-CN.md)
-- [English](README.en.md)
+[简体中文](README.zh-CN.md) | [English](README.en.md)
 
 ## Download
 
-- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.49.xpi)
+- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi)
 - [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)
+- [MinerU API Docs](https://mineru.net/apiManage/docs)
+
+## Highlights
+
+- Adds a Zotero context-menu action for parsing a selected PDF attachment into HTML.
+- Imports the generated HTML and a postprocess report back to the same Zotero item.
+- Opens the new HTML attachment in Zotero automatically after a successful parse.
+- Cleans common reading friction in the generated HTML, including paragraph alignment, simple LaTeX, and figure OCR noise.

@@ -2,13 +2,13 @@
 
 [简体中文](README.zh-CN.md) | [English](README.en.md)
 
-把 Zotero 里的 PDF 附件提交给 MinerU 精准解析 API，下载解析结果中的 HTML，并自动作为附件挂回 Zotero 条目。
+MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU 精准解析 API，下载解析结果中的 HTML，自动挂回 Zotero 条目，并在解析完成后直接打开生成的 HTML。
 
-[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.49.xpi) · [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) · [MinerU API 文档](https://mineru.net/apiManage/docs)
+[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
 
 ## 功能
 
-- 在 Zotero 条目/附件右键菜单中添加 `用 MinerU 解析为 HTML`。
+- 在 Zotero 条目或附件右键菜单中添加 `用 MinerU 解析为 HTML`。
 - 支持选择一个 PDF 附件，或选择一个只包含一个 PDF 附件的普通 Zotero 条目。
 - 调用 MinerU 精准解析本地文件上传流程：
   - `POST /api/v4/file-urls/batch` 获取上传地址和 `batch_id`
@@ -17,13 +17,14 @@
 - 请求 `extra_formats: ["html"]`，优先提取结果压缩包中的 `main.html`、`full.html` 或第一个 HTML 文件。
 - 对生成的 HTML 做面向阅读的后处理，包括段落排版、简单 LaTeX 清理、常见图号 OCR 噪声抑制。
 - 生成一份 `.mineru-postprocess.txt` 报告，和 HTML 一起附加回 Zotero 条目。
+- 解析成功后自动在 Zotero 中打开新生成的 HTML 附件。
 
 ## 安装
 
 ### 从 GitHub Release 安装
 
 1. 打开 [最新版 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)。
-2. 下载 `mineru-html-parser-0.1.49.xpi`。
+2. 下载 `mineru-html-parser-0.1.50.xpi`。
 3. 打开 Zotero。
 4. 进入 `Tools -> Plugins`。
 5. 点击齿轮菜单，选择 `Install Add-on From File...`。
@@ -53,7 +54,7 @@
 1. 在 Zotero 中选中一个 PDF 附件，或选中一个只包含一个 PDF 附件的条目。
 2. 右键选择 `用 MinerU 解析为 HTML`。
 3. 等待解析进度完成。
-4. 插件会把生成的 HTML 附件和后处理报告附加到同一个 Zotero 条目下。
+4. 插件会把生成的 HTML 附件和后处理报告附加到同一个 Zotero 条目下，并自动打开 HTML。
 
 当前版本一次只处理一个 PDF。文件超过 200 MB 会被阻止；如果插件能估算页数且页数超过 200 页，也会提前阻止上传。
 

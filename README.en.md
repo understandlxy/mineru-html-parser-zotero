@@ -2,9 +2,9 @@
 
 [简体中文](README.zh-CN.md) | [English](README.en.md)
 
-MinerU HTML Parser for Zotero uploads a selected local PDF attachment to the MinerU precise parsing API, downloads the generated HTML result, and attaches it back to the Zotero item.
+MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a readable HTML attachment through the MinerU precise parsing API. After parsing succeeds, the plugin imports the generated HTML back to Zotero and opens it automatically.
 
-[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.49.xpi) · [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) · [MinerU API Docs](https://mineru.net/apiManage/docs)
+[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.50.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
 
 ## Features
 
@@ -15,15 +15,16 @@ MinerU HTML Parser for Zotero uploads a selected local PDF attachment to the Min
   - `PUT` the PDF to the signed upload URL
   - `GET /api/v4/extract-results/batch/{batch_id}` to poll parsing results
 - Requests `extra_formats: ["html"]` and extracts `main.html`, `full.html`, or the first HTML file from the result archive.
-- Applies lightweight reading-oriented HTML cleanup, including paragraph alignment, simple LaTeX cleanup, and common figure-number OCR noise suppression.
+- Applies reading-oriented HTML cleanup, including paragraph alignment, simple LaTeX cleanup, and common figure-number OCR noise suppression.
 - Attaches both the generated HTML and a `.mineru-postprocess.txt` report back to the Zotero item.
+- Opens the newly attached HTML in Zotero automatically after parsing finishes.
 
 ## Installation
 
 ### Install From GitHub Release
 
 1. Open the [latest release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest).
-2. Download `mineru-html-parser-0.1.49.xpi`.
+2. Download `mineru-html-parser-0.1.50.xpi`.
 3. Open Zotero.
 4. Go to `Tools -> Plugins`.
 5. Open the gear menu and choose `Install Add-on From File...`.
@@ -31,7 +32,7 @@ MinerU HTML Parser for Zotero uploads a selected local PDF attachment to the Min
 
 ### Install From Add-on Market
 
-If Add-on Market for Zotero has indexed this plugin, you can search for `MinerU HTML Parser` there and install it directly.
+If Add-on Market for Zotero has indexed this plugin, search for `MinerU HTML Parser` there and install it directly.
 
 ## Configuration
 
@@ -46,14 +47,14 @@ After installation, open the `MinerU HTML Parser` pane in Zotero preferences:
   - Use `Chinese (zh)` for Chinese PDFs.
   - Use `English (en)` for English PDFs.
 
-Click `Test MinerU Connection` to verify that the token works. If you do not have a token, click `Apply for Free Key` in the preferences pane to open the MinerU website.
+Click `Test MinerU Connection` to verify the token. If you do not have a token, click `Apply for Free Key` in the preferences pane to open the MinerU website.
 
 ## Usage
 
 1. Select one PDF attachment in Zotero, or select one item that has exactly one PDF attachment.
 2. Right-click and choose `Parse with MinerU to HTML`.
 3. Wait for parsing to finish.
-4. The plugin attaches the generated HTML and the postprocess report to the same Zotero item.
+4. The plugin attaches the generated HTML and postprocess report to the same Zotero item, then opens the HTML attachment.
 
 The current version processes one PDF at a time. Files larger than 200 MB are blocked. If the plugin can estimate the page count and it is over 200 pages, it blocks the upload before submitting the task.
 
