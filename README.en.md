@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero turns a selected Zotero PDF attachment into a readable HTML attachment through the MinerU precise parsing API. After parsing succeeds, the plugin imports the generated HTML back to Zotero and opens it automatically.
 
-[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
+[Download Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.97.xpi) | [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API Docs](https://mineru.net/apiManage/docs)
 
 ## PDF To HTML Comparison
 
@@ -40,7 +40,7 @@ This example shows the difference between the original paper PDF and the HTML at
 ### Install From GitHub Release
 
 1. Open the [latest release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest).
-2. Download `mineru-html-parser-0.1.96.xpi`.
+2. Download `mineru-html-parser-0.1.97.xpi`.
 3. Open Zotero.
 4. Go to `Tools -> Plugins`.
 5. Open the gear menu and choose `Install Add-on From File...`.
@@ -50,8 +50,9 @@ This example shows the difference between the original paper PDF and the HTML at
 
 If Add-on Market for Zotero has indexed this plugin, search for `MinerU HTML Parser` there and install it directly.
 
-## What's New In 0.1.96
+## What's New In 0.1.97
 
+- Repairs Springer-style reference tails where the final list item continues after `</ul>` and the next numbered reference is parsed as normal body text.
 - Keeps Markdown output generation alive when the result archive has no HTML fallback files.
 - Aligns the precise parsing request with the reference plugin's core payload.
 - Embeds original MinerU zip images through byte-array base64 conversion instead of binary strings, avoiding silent JPEG byte corruption and dark image bands.

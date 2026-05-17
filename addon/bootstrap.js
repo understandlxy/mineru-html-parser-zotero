@@ -3158,6 +3158,7 @@ pre {
 
     splitReferenceParagraphs(html) {
       html = this.repairMisplacedBareReferenceBlock(html);
+      html = this.repairTrailingReferenceContinuationList(html);
       html = html.replace(/(<h[1-6]\b[^>]*>\s*References\s*<\/h[1-6]>\s*)<p([^>]*)>\s*([\s\S]*?)\s*<\/p>/gi, (match, heading, attrs, content) => {
         let parts = this.separateNomenclatureTail(content);
         let entries = this.splitBareNumberedReferenceEntries(parts.referenceText);
@@ -3191,6 +3192,81 @@ pre {
         let tail = parts.tail ? `<p${paragraphAttrs || ""}>${this.escapeHTML(parts.tail)}</p>` : "";
         return `${heading}${referenceList}${acknowledgmentsHeading}${tail}`;
       });
+    },
+
+    repairTrailingReferenceContinuationList(html) {
+      return String(html || "").replace(/(<h[1-6]\b[^>]*>\s*References\s*<\/h[1-6]>\s*<ul\b[^>]*>[\s\S]*<li\b[^>]*>)([\s\S]*?)(<\/li>\s*<\/ul>\s*)<p([^>]*)>\s*([\s\S]*?)\s*<\/p>/gi, (match, beforeLastReference, lastReference, afterList, paragraphAttrs, paragraphContent) => {
+        let continuation = String(paragraphContent || "").replace(/\s+/g, " ").trim();
+        if (!continuation || this.isReferenceTailParagraph(continuation)) {
+          return match;
+        }
+        let plainContinuation = this.plainText(continuation).trim();
+        if (!/^[a-z(]/.test(plainContinuation) || !/\b\d{1,3}\.\s+(?=[A-Z]|\p{Lu})/u.test(plainContinuation)) {
+          return match;
+        }
+
+        let marker = this.firstEmbeddedNumberedReferenceMarker(continuation);
+        if (!marker) {
+          return match;
+        }
+        let mergedLast = `${lastReference.replace(/\s+$/g, "")} ${continuation.slice(0, marker.index).trim()}`.trim();
+        let numberedEntries = this.splitEmbeddedNumberedReferenceEntries(continuation.slice(marker.index));
+        if (!mergedLast || !numberedEntries.length) {
+          return match;
+        }
+        let repairedEntries = numberedEntries.map(entry => `<li>${entry}</li>`).join("\n");
+        return `${beforeLastReference}${mergedLast}</li>\n${repairedEntries}</ul>`;
+      });
+    },
+
+    isReferenceTailParagraph(content) {
+      let value = this.plainText(content).replace(/\s+/g, " ").trim();
+      return /^(?:Publisher'?s Note|Springer Nature|Elsevier|Copyright|Open Access)\b/i.test(value);
+    },
+
+    firstEmbeddedNumberedReferenceMarker(content) {
+      let value = String(content || "");
+      let markerPattern = /\s(\d{1,3})\.\s+(?=(?:[A-Z]|\p{Lu}))/gu;
+      let match;
+      while ((match = markerPattern.exec(value))) {
+        let prefix = value.slice(Math.max(0, match.index - 16), match.index + 1);
+        if (/\bdoi\.org\/10\.\d{3,9}\/?$/i.test(prefix) || /\b10\.\d{3,9}\/?$/i.test(prefix)) {
+          continue;
+        }
+        return {
+          index: match.index + 1,
+          number: parseInt(match[1], 10)
+        };
+      }
+      return null;
+    },
+
+    splitEmbeddedNumberedReferenceEntries(content) {
+      let value = String(content || "").replace(/\s+/g, " ").trim();
+      let markers = [];
+      let markerPattern = /(^|\s)(\d{1,3})\.\s+(?=(?:[A-Z]|\p{Lu}))/gu;
+      let match;
+      while ((match = markerPattern.exec(value))) {
+        let start = match.index + match[1].length;
+        let prefix = value.slice(Math.max(0, start - 16), start);
+        if (/\bdoi\.org\/10\.\d{3,9}\/?$/i.test(prefix) || /\b10\.\d{3,9}\/?$/i.test(prefix)) {
+          continue;
+        }
+        markers.push({ start, number: parseInt(match[2], 10) });
+      }
+      if (!markers.length || markers[0].start !== 0) {
+        return [];
+      }
+      let entries = [];
+      for (let index = 0; index < markers.length; index++) {
+        let start = markers[index].start;
+        let end = index + 1 < markers.length ? markers[index + 1].start : value.length;
+        let entry = value.slice(start, end).trim();
+        if (entry) {
+          entries.push(entry);
+        }
+      }
+      return entries;
     },
 
     separateNomenclatureTail(content) {

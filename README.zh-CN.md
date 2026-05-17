@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU 精准解析 API，下载解析结果中的 HTML，自动挂回 Zotero 条目，并在解析完成后直接打开生成的 HTML。
 
-[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
+[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.97.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
 
 ## 原 PDF 与解析 HTML 对比
 
@@ -41,7 +41,7 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 ### 从 GitHub Release 安装
 
 1. 打开 [最新版 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)。
-2. 下载 `mineru-html-parser-0.1.96.xpi`。
+2. 下载 `mineru-html-parser-0.1.97.xpi`。
 3. 打开 Zotero。
 4. 进入 `Tools -> Plugins`。
 5. 点击齿轮菜单，选择 `Install Add-on From File...`。
@@ -51,8 +51,9 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 
 如果 Add-on Market for Zotero 已经收录本插件，也可以在插件市场中搜索 `MinerU HTML Parser` 并安装。
 
-## 0.1.96 更新重点
+## 0.1.97 更新重点
 
+- 修复 Springer 风格参考文献末尾条目被拆到列表外，并把下一条编号参考文献当成正文显示的问题。
 - 修复作者编号上标生成时的 HTML 转义问题，避免 `<sup>` 标签残片显示在正文中。
 - 修复第 1 条参考文献被解析成列表项、后续编号参考文献被错放到致谢标题后的情况。
 - 清理 Elsevier 风格输出里的重复文件名标题、标题页 KaTeX 单位片段、粘连作者尾标、a/b 机构合并和实验步骤编号错位。

@@ -6,7 +6,7 @@ Submit a Zotero PDF attachment to the MinerU precise parsing API, import the gen
 
 ## Download
 
-- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi)
+- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.97.xpi)
 - [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)
 - [MinerU API Docs](https://mineru.net/apiManage/docs)
 
@@ -33,10 +33,11 @@ This example shows the difference between the original paper PDF and the HTML at
 - Automatically compacts wide tables so multi-column tables fit inside the A4-style page.
 - Cleans common reading friction in the generated HTML, including paragraph alignment, simple LaTeX, and figure OCR noise.
 
-## Version 0.1.96
+## Version 0.1.97
 
 This release focuses on paper-like reading quality for MinerU output:
 
+- Repairs Springer-style reference tails where the final list item continues after `</ul>` and the next numbered reference is parsed as normal body text.
 - Keeps Markdown output generation alive when a result archive does not contain HTML fallback files.
 - Aligns the MinerU precise parsing request with the reference plugin's core payload.
 - Embeds original MinerU zip images through byte-array base64 conversion instead of binary strings, avoiding silent JPEG byte corruption and dark image bands.
