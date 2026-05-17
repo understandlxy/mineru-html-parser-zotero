@@ -4,7 +4,7 @@
 
 MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU 精准解析 API，下载解析结果中的 HTML，自动挂回 Zotero 条目，并在解析完成后直接打开生成的 HTML。
 
-[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.71.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
+[下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
 
 ## 功能
 
@@ -14,16 +14,18 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
   - `POST /api/v4/file-urls/batch` 获取上传地址和 `batch_id`
   - `PUT` PDF 到签名上传地址
   - `GET /api/v4/extract-results/batch/{batch_id}` 轮询解析结果
-- 优先从 MinerU 结果压缩包中的 `full.md` 重建阅读 HTML，将图片嵌入为 data URL，并在解析请求中指定 `doclayout_yolo` 布局模型，尽量让 MinerU 在生成结果前保留原 PDF 的整张图区域。
+- 优先从 MinerU 结果压缩包中的 `full.md` 重建阅读 HTML，将图片嵌入为 data URL，并在解析请求中指定 `doclayout_yolo` 布局模型。
 - 图片块按 MinerU 原始输出保持，不再把拆开的子图在后处理阶段重新组合成自定义组图。
+- 直接嵌入 MinerU 结果压缩包中的原始图片，并使用字节数组安全转 base64，避免二进制字符串污染导致半张图变黑。
 - 内置 KaTeX，将 MinerU 输出中的 LaTeX 片段渲染为 MathML，并使用 Times New Roman / Noto Serif SC 阅读字体栈。
+- 将标题页的作者、机构和邮箱块整理为左对齐、不拉伸的排版，并把数字或字母作者编号显示为上标。
 - 将 `[1] ... [2] ...` 这类连续参考文献拆成独立段落，避免参考文献挤成一整坨。
 - 图片/表格标题中的公式渲染内容也会和标题文字一起保持加粗。
 - 使用接近 A4 纸张的页面宽度、屏幕留白和打印 `@page` 页边距，让 HTML 更适合按论文版式阅读。
 - 自动压缩宽表格，让多列表格尽量完整显示在 A4 风格页面内。
 - 如果 Markdown 输出不可用，再回退提取 `main.html`、`full.html` 或第一个 HTML 文件。
 - 对生成的 HTML 做面向阅读的后处理，包括段落排版、简单 LaTeX 清理、常见图号 OCR 噪声抑制。
-- 生成一份 `.mineru-postprocess.txt` 报告，和 HTML 一起附加回 Zotero 条目。
+- 生成一份 `.mineru-postprocess.txt` 报告，记录 HTML 后处理和图片数量变化，并和 HTML 一起附加回 Zotero 条目。
 - 解析成功后自动在 Zotero 中打开新生成的 HTML 附件。
 
 ## 安装
@@ -31,7 +33,7 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 ### 从 GitHub Release 安装
 
 1. 打开 [最新版 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)。
-2. 下载 `mineru-html-parser-0.1.71.xpi`。
+2. 下载 `mineru-html-parser-0.1.96.xpi`。
 3. 打开 Zotero。
 4. 进入 `Tools -> Plugins`。
 5. 点击齿轮菜单，选择 `Install Add-on From File...`。
@@ -41,24 +43,30 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 
 如果 Add-on Market for Zotero 已经收录本插件，也可以在插件市场中搜索 `MinerU HTML Parser` 并安装。
 
-## 0.1.71 更新重点
+## 0.1.96 更新重点
 
+- 修复作者编号上标生成时的 HTML 转义问题，避免 `<sup>` 标签残片显示在正文中。
+- 修复第 1 条参考文献被解析成列表项、后续编号参考文献被错放到致谢标题后的情况。
+- 清理 Elsevier 风格输出里的重复文件名标题、标题页 KaTeX 单位片段、粘连作者尾标、a/b 机构合并和实验步骤编号错位。
+- 修复标题页里 `10 mm 316L` 被 MinerU 作为 KaTeX annotation 输出后仍粘成 `10 mm316L` 的情况。
+- 标题页里还原出来的 `10 mm 316L` 会保持粗体，和标题其他文字一致。
+- 将标题页的作者、机构和邮箱块整理为左对齐、不拉伸的排版，并支持 `1,2` 与 `a,b` 两类上标编号。
+- 优化 Elsevier/CIRP 这类作者编号贴在姓氏末尾、机构 `a/b/c` 连在同一段里的标题页排版。
+- 优化 Springer/Elsevier 这类作者上标被解析成 KaTeX 片段、通讯作者 `*` 被拆到下一行的标题页排版。
+- 避免把 `and` 这类普通连接词里的字母误识别为作者脚注。
+- 使用字节数组安全转 base64 嵌入 MinerU ZIP 原图，修复 JPEG 字节被字符串转换污染后出现的半张图黑块问题。
+- HTML 后处理期间保护图片 data URL，防止正文、公式和单位清理规则误改 base64 字符。
+- 直接使用 MinerU 结果压缩包中的原始图片 data URL，不再经过本地 PDF 裁图重渲染，修复图像紫色/蓝色偏色问题。
+- 后处理报告不再输出 PDF 裁图替换计数，避免把已移除的实验性修复路径误认为仍在运行。
+- 修复结果包不含 HTML 文件时的回退报错，确保优先使用 `full.md` 生成 HTML。
 - 使用 MinerU 的 `doclayout_yolo` 布局路径，并避免在后处理阶段重新拼组图，让组图更接近原 PDF 版式。
-- 优先从 `full.md` 重建阅读 HTML，将图片资源嵌入为 data URL，同时保留异常结果压缩包的 HTML 回退路径。
 - 内置 KaTeX，将 `$...$` / `$$...$$` 片段渲染为 MathML，避免正文直接露出 LaTeX 源码。
-- 使用 Times New Roman / Noto Serif SC 字体栈，并采用接近 A4 的页面宽度、屏幕留白和打印 `@page` 页边距。
-- 将 `[1] ... [2] ...` 这类被压缩到同一段里的参考文献拆成独立段落。
-- 让图题/表题里的公式渲染结果保持加粗，并自动压缩宽表格以适配 A4 风格页面。
 
 ## 配置
 
 安装后进入 Zotero 设置里的 `MinerU HTML Parser` 面板：
 
 - `解析密钥`：填写 MinerU 精准解析 API Token。
-- `解析模型`：
-  - `vlm`：推荐，高精度视觉语言模型，适合复杂版面、图表、多栏 PDF。
-  - `pipeline`：通用管线模型，适合常规 PDF。
-  - `MinerU-HTML`：用于 HTML 输入场景，普通 PDF 解析通常不需要。
 - `语言`：
   - 中文 PDF 选择 `中文 (zh)`。
   - 英文 PDF 选择 `English (en)`。

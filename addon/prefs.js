@@ -1,4 +1,3 @@
-pref("extensions.mineru-html.modelVersion", "vlm");
 pref("extensions.mineru-html.language", "ch");
 pref("extensions.mineru-html.enableFormula", true);
 pref("extensions.mineru-html.enableTable", true);

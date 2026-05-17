@@ -10,7 +10,7 @@
         <html:div id="mineru-html-intro-feature-title" class="mineru-html-intro-title">功能说明</html:div>
         <html:div id="mineru-html-intro-feature-text" class="mineru-html-intro-text">将 Zotero 中的 PDF 提交给 MinerU 精准解析，生成更适合阅读的 HTML 附件，并自动清理常见 OCR 噪声。</html:div>
         <html:div id="mineru-html-intro-steps-title" class="mineru-html-intro-title">使用步骤</html:div>
-        <html:div id="mineru-html-intro-steps-text" class="mineru-html-intro-text">填写解析密钥，选择解析模型和语言后保存；在条目或 PDF 附件上右键选择“用 MinerU 解析为 HTML”。</html:div>
+        <html:div id="mineru-html-intro-steps-text" class="mineru-html-intro-text">填写解析密钥并选择语言后保存；在条目或 PDF 附件上右键选择“用 MinerU 解析为 HTML”。</html:div>
       </vbox>
 
       <vbox class="mineru-html-field">
@@ -23,26 +23,6 @@
             tooltiptext="解析密钥是 MinerU 精准解析 API 的 Token，用于提交 PDF 解析任务。没有密钥时可点击下方“免费申请密钥”到 MinerU 官网申请，申请和基础额度免费。基础额度完全足够科研论文阅读的使用。"/>
         </hbox>
         <html:input id="mineru-html-token" type="password" preference="extensions.mineru-html.apiTokenFallback" autocomplete="off"/>
-      </vbox>
-
-      <vbox class="mineru-html-field">
-        <hbox class="mineru-html-label-row" align="center">
-          <label id="mineru-html-model-label" value="解析模型"/>
-          <button
-            id="mineru-html-model-help"
-            class="mineru-html-help-button"
-            label="?"
-            tooltiptext="vlm：推荐的高精度视觉语言模型，适合复杂版面、图表、多栏 PDF&#10;pipeline：通用管线模型，适合常规 PDF，通常更偏稳定/传统解析&#10;MinerU-HTML：用于对 HTML 文件进行解析并输入，解析 HTML 文件时才需要指定它"/>
-        </hbox>
-        <hbox align="center">
-          <menulist id="mineru-html-model" preference="extensions.mineru-html.modelVersion">
-            <menupopup>
-              <menuitem label="vlm" value="vlm"/>
-              <menuitem label="pipeline" value="pipeline"/>
-              <menuitem label="MinerU-HTML" value="MinerU-HTML"/>
-            </menupopup>
-          </menulist>
-        </hbox>
       </vbox>
 
       <vbox class="mineru-html-field">

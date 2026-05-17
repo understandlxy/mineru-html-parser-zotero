@@ -42,11 +42,9 @@ async function startup({ id, version, rootURI }) {
         introFeatureTitle: "功能说明",
         introFeatureText: "将 Zotero 中的 PDF 提交给 MinerU 精准解析，生成更适合阅读的 HTML 附件，并自动清理常见 OCR 噪声。",
         introStepsTitle: "使用步骤",
-        introStepsText: "填写解析密钥，选择解析模型和语言后保存；在条目或 PDF 附件上右键选择“用 MinerU 解析为 HTML”。",
+        introStepsText: "填写解析密钥并选择语言后保存；在条目或 PDF 附件上右键选择“用 MinerU 解析为 HTML”。",
         tokenLabel: "解析密钥",
         tokenHelp: "解析密钥是 MinerU 精准解析 API 的 Token，用于提交 PDF 解析任务。没有密钥时可点击下方“免费申请密钥”到 MinerU 官网申请，申请和基础额度免费。基础额度完全足够科研论文阅读的使用。",
-        modelLabel: "解析模型",
-        modelHelp: "vlm：推荐的高精度视觉语言模型，适合复杂版面、图表、多栏 PDF\npipeline：通用管线模型，适合常规 PDF，通常更偏稳定/传统解析\nMinerU-HTML：用于对 HTML 文件进行解析并输入，解析 HTML 文件时才需要指定它",
         languageLabel: "语言",
         languageHelp: "根据 PDF 中文字语言类型来选择。中文文档选择中文，纯英文文档选择 English。",
         languageZh: "中文 (zh)",
@@ -61,9 +59,8 @@ async function startup({ id, version, rootURI }) {
         savedWithToken: "设置已保存，Token 已保存。需要验证请点击“测试 MinerU 连接”。",
         savedNoToken: "设置已保存，但未填写 MinerU API Token。",
         saveFailed: "保存失败：{message}",
-        unknownModel: "未知模型：{model}",
         unknownLanguage: "未知语言：{language}",
-        configAvailable: "当前配置可用：{model} / {language}，HTML 输出与清理规则已启用。",
+        configAvailable: "当前配置可用：{language}，HTML 输出与清理规则已启用。",
         configInvalid: "配置异常：{message}",
         testingConnection: "正在测试 MinerU 连接...",
         tokenRequired: "请先填写或保存 MinerU API Token。",
@@ -77,11 +74,9 @@ async function startup({ id, version, rootURI }) {
         introFeatureTitle: "What This Plugin Does",
         introFeatureText: "Submits Zotero PDFs to the MinerU precise parsing API, creates a cleaner HTML attachment for reading, and removes common OCR noise.",
         introStepsTitle: "How To Use",
-        introStepsText: "Enter your parsing key, choose the parsing model and document language, then save. Right-click an item or PDF attachment and choose “Parse with MinerU to HTML”.",
+        introStepsText: "Enter your parsing key, choose the document language, then save. Right-click an item or PDF attachment and choose “Parse with MinerU to HTML”.",
         tokenLabel: "Parsing Key",
         tokenHelp: "The parsing key is your MinerU precise parsing API token. It is used to submit PDF parsing jobs. If you do not have one, click “Apply for Free Key” below to request it on the MinerU website. Applying is free, and the basic quota is free. The basic quota is fully enough for reading research papers.",
-        modelLabel: "Parsing Model",
-        modelHelp: "vlm: Recommended high-accuracy vision-language model for complex layouts, charts, and multi-column PDFs.\npipeline: General pipeline model for regular PDFs, usually more stable and traditional.\nMinerU-HTML: For parsing and inputting HTML files. Use it only when parsing HTML files.",
         languageLabel: "Language",
         languageHelp: "Choose according to the text language in the PDF. Use Chinese for Chinese documents and English for English-only documents.",
         languageZh: "Chinese (zh)",
@@ -96,9 +91,8 @@ async function startup({ id, version, rootURI }) {
         savedWithToken: "Settings saved. Token saved. Click “Test MinerU Connection” to verify it.",
         savedNoToken: "Settings saved, but no MinerU API token was entered.",
         saveFailed: "Save failed: {message}",
-        unknownModel: "Unknown model: {model}",
         unknownLanguage: "Unknown language: {language}",
-        configAvailable: "Current config is valid: {model} / {language}. HTML output and cleanup rules are enabled.",
+        configAvailable: "Current config is valid: {language}. HTML output and cleanup rules are enabled.",
         configInvalid: "Config error: {message}",
         testingConnection: "Testing MinerU connection...",
         tokenRequired: "Please enter or save a MinerU API token first.",
@@ -187,7 +181,6 @@ async function startup({ id, version, rootURI }) {
     },
 
     loadPrefsPaneValues(win) {
-      this.setPrefsValue(win, "mineru-html-model", this.pref("modelVersion", "vlm"));
       this.setPrefsValue(win, "mineru-html-language", this.pref("language", "ch"));
       this.loadTokenForPrefsPane(win).catch(error => {
         log(`Preference pane token load failed: ${error?.stack || error}`);
@@ -204,7 +197,6 @@ async function startup({ id, version, rootURI }) {
     async savePrefsPane(win) {
       try {
         this.setPrefsStatus(win, this.t("saving"));
-        Zotero.Prefs.set(this.PREF_BRANCH + "modelVersion", this.getPrefsValue(win, "mineru-html-model") || "vlm");
         Zotero.Prefs.set(this.PREF_BRANCH + "language", this.getPrefsValue(win, "mineru-html-language") || "ch");
         this.writeFixedPrefs();
 
@@ -220,16 +212,12 @@ async function startup({ id, version, rootURI }) {
 
     async testPrefsPaneConfig(win) {
       try {
-        let model = this.getPrefsValue(win, "mineru-html-model") || "vlm";
         let language = this.getPrefsValue(win, "mineru-html-language") || "ch";
-        if (!["vlm", "pipeline", "MinerU-HTML"].includes(model)) {
-          throw new Error(this.t("unknownModel", { model }));
-        }
         if (!["ch", "en"].includes(language)) {
           throw new Error(this.t("unknownLanguage", { language }));
         }
         this.writeFixedPrefs();
-        this.setPrefsStatus(win, this.t("configAvailable", { model, language: this.displayLanguage(language) }));
+        this.setPrefsStatus(win, this.t("configAvailable", { language: this.displayLanguage(language) }));
       }
       catch (error) {
         log(`Preference pane config test failed: ${error?.stack || error}`);
@@ -240,7 +228,6 @@ async function startup({ id, version, rootURI }) {
     async testPrefsPaneConnection(win) {
       try {
         this.setPrefsStatus(win, this.t("testingConnection"));
-        Zotero.Prefs.set(this.PREF_BRANCH + "modelVersion", this.getPrefsValue(win, "mineru-html-model") || "vlm");
         Zotero.Prefs.set(this.PREF_BRANCH + "language", this.getPrefsValue(win, "mineru-html-language") || "ch");
         this.writeFixedPrefs();
 
@@ -258,22 +245,19 @@ async function startup({ id, version, rootURI }) {
     },
 
     async testMinerUConnection(token) {
-      let dataID = this.uuid();
-      let body = this.applyMinerUModelVersion({
+      let body = {
         files: [
           {
             name: "mineru-html-connection-test.pdf",
-            data_id: dataID,
             is_ocr: false
           }
         ],
-        extra_formats: ["html"],
         language: this.pref("language", "ch"),
         enable_formula: true,
         enable_table: true,
         enable_page_ocr: false,
         layout_model: "doclayout_yolo"
-      });
+      };
       let json = await this.fetchJSON(`${this.API_BASE}/file-urls/batch`, {
         method: "POST",
         headers: {
@@ -316,8 +300,6 @@ async function startup({ id, version, rootURI }) {
       this.setPrefsText(win, "mineru-html-intro-steps-text", this.t("introStepsText"));
       this.setPrefsAttribute(win, "mineru-html-token-label", "value", this.t("tokenLabel"));
       this.setPrefsAttribute(win, "mineru-html-token-help", "tooltiptext", this.t("tokenHelp"));
-      this.setPrefsAttribute(win, "mineru-html-model-label", "value", this.t("modelLabel"));
-      this.setPrefsAttribute(win, "mineru-html-model-help", "tooltiptext", this.t("modelHelp"));
       this.setPrefsAttribute(win, "mineru-html-language-label", "value", this.t("languageLabel"));
       this.setPrefsAttribute(win, "mineru-html-language-help", "tooltiptext", this.t("languageHelp"));
       this.setPrefsAttribute(win, "mineru-html-language-zh", "label", this.t("languageZh"));
@@ -520,7 +502,7 @@ async function startup({ id, version, rootURI }) {
       let dataID = this.uuid();
       log(`Requesting MinerU upload URL for ${fileName}`);
       progress?.step("正在请求 MinerU 上传地址...", 10);
-      let { batchID, uploadURL } = await this.requestUploadURL({ token, fileName, dataID });
+      let { batchID, uploadURL } = await this.requestUploadURL({ token, fileName });
 
       log(`Uploading ${fileName} to MinerU batch ${batchID}`);
       progress?.step("正在上传 PDF 到 MinerU...", 20);
@@ -553,7 +535,12 @@ async function startup({ id, version, rootURI }) {
       }
       catch (error) {
         log(`Markdown-first HTML generation failed; falling back to MinerU HTML. ${error?.stack || error}`);
-        await this.extractHTMLFromZip(zipPath, htmlPath);
+        try {
+          await this.extractHTMLFromZip(zipPath, htmlPath);
+        }
+        catch (fallbackError) {
+          throw new Error(`Markdown HTML generation failed: ${error?.message || error}. HTML fallback also failed: ${fallbackError?.message || fallbackError}`);
+        }
         sourceInfo = {
           sourceMode: "html-fallback",
           markdownImages: 0,
@@ -572,26 +559,22 @@ async function startup({ id, version, rootURI }) {
       return { htmlPath, reportPath: report?.reportPath || null };
     },
 
-    async requestUploadURL({ token, fileName, dataID }) {
+    async requestUploadURL({ token, fileName }) {
       let isOCR = Boolean(this.pref("isOCR", false));
       let mineruFileName = this.normalizeMinerUFileName(fileName);
       let body = {
         files: [
           {
             name: mineruFileName,
-            data_id: dataID,
             is_ocr: isOCR
           }
         ],
-        extra_formats: ["html"],
         language: this.pref("language", "ch"),
         enable_formula: this.pref("enableFormula", true),
         enable_table: this.pref("enableTable", true),
         enable_page_ocr: isOCR,
         layout_model: "doclayout_yolo"
       };
-      this.applyMinerUModelVersion(body);
-
       let json = await this.fetchJSON(`${this.API_BASE}/file-urls/batch`, {
         method: "POST",
         headers: {
@@ -608,14 +591,6 @@ async function startup({ id, version, rootURI }) {
         throw new Error("MinerU did not return an upload URL and batch_id.");
       }
       return { batchID, uploadURL };
-    },
-
-    applyMinerUModelVersion(body) {
-      let modelVersion = this.pref("modelVersion", "vlm");
-      if (modelVersion && modelVersion !== "vlm") {
-        body.model_version = modelVersion;
-      }
-      return body;
     },
 
     async uploadFile(uploadURL, filePath) {
@@ -786,7 +761,8 @@ async function startup({ id, version, rootURI }) {
           continue;
         }
         seen.add(ref);
-        let dataURL = await this.extractZipImageDataURL(zipReader, ref);
+        let imageData = await this.readZipImageData(zipReader, ref);
+        let dataURL = imageData?.dataURL || "";
         if (dataURL) {
           imageMap[ref] = dataURL;
         }
@@ -795,25 +771,32 @@ async function startup({ id, version, rootURI }) {
     },
 
     async extractZipImageDataURL(zipReader, entry) {
+      return (await this.readZipImageData(zipReader, entry))?.dataURL || "";
+    },
+
+    async readZipImageData(zipReader, entry) {
       let resolvedEntry = this.resolveZipEntry(zipReader, entry);
       if (!resolvedEntry) {
-        return "";
+        return null;
       }
       let stream = zipReader.getInputStream(resolvedEntry);
       let binaryStream = Cc["@mozilla.org/binaryinputstream;1"].createInstance(Ci.nsIBinaryInputStream);
       binaryStream.setInputStream(stream);
-      let binary = "";
+      let chunks = [];
+      let byteLength = 0;
       try {
         while (binaryStream.available() > 0) {
-          binary += binaryStream.readBytes(binaryStream.available());
+          let chunk = binaryStream.readByteArray(binaryStream.available());
+          chunks.push(chunk);
+          byteLength += chunk.length;
         }
       }
       finally {
         binaryStream.close();
         stream.close();
       }
-      if (!binary) {
-        return "";
+      if (!byteLength) {
+        return null;
       }
       let ext = (resolvedEntry.split(".").pop() || "png").toLowerCase();
       let mime = ext === "jpg" || ext === "jpeg"
@@ -823,11 +806,34 @@ async function startup({ id, version, rootURI }) {
           : ext === "webp"
             ? "image/webp"
             : "image/png";
-      return `data:${mime};base64,${btoa(binary)}`;
+      return {
+        resolvedEntry,
+        dataURL: `data:${mime};base64,${this.byteChunksToBase64(chunks, byteLength)}`
+      };
+    },
+
+    byteChunksToBase64(chunks, byteLength) {
+      let bytes = new Uint8Array(byteLength);
+      let offset = 0;
+      for (let chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      let parts = [];
+      let chunkSize = 0x8000;
+      for (let index = 0; index < bytes.length; index += chunkSize) {
+        let end = Math.min(index + chunkSize, bytes.length);
+        let binary = "";
+        for (let byteIndex = index; byteIndex < end; byteIndex++) {
+          binary += String.fromCharCode(bytes[byteIndex]);
+        }
+        parts.push(binary);
+      }
+      return btoa(parts.join(""));
     },
 
     resolveZipEntry(zipReader, entry) {
-      let candidates = [String(entry || "").replace(/\\/g, "/")];
+      let candidates = [this.normalizeZipPath(entry)];
       try {
         let decoded = decodeURIComponent(candidates[0]);
         if (decoded !== candidates[0]) {
@@ -848,6 +854,10 @@ async function startup({ id, version, rootURI }) {
         }
       }
       return "";
+    },
+
+    normalizeZipPath(value) {
+      return String(value || "").replace(/\\/g, "/").replace(/^\.?\//, "");
     },
 
     renderMarkdownDocument(markdown, options = {}) {
@@ -1173,6 +1183,10 @@ async function startup({ id, version, rootURI }) {
       if (entries.length < 2) {
         return "";
       }
+      return this.renderReferenceEntriesBlock(entries, renderEntry);
+    },
+
+    renderReferenceEntriesBlock(entries, renderEntry) {
       return `<div class="mineru-reference-list">\n${entries.map(entry => {
         return `<p class="mineru-reference">${renderEntry(entry)}</p>`;
       }).join("\n")}\n</div>`;
@@ -1240,7 +1254,10 @@ ${bodyHTML}
         markdownBlocks: options.markdownBlocks,
         fallbackReason: options.fallbackReason
       });
-      let updated = this.runPostprocessStep(report, "injectReadableStyles", html, value => this.injectReadableStyles(value));
+      let protectedDataURLs = this.protectDataURLAttributes(html);
+      let updated = this.runPostprocessStep(report, "injectReadableStyles", protectedDataURLs.html, value => this.injectReadableStyles(value));
+      updated = this.runPostprocessStep(report, "normalizeFrontMatterHeadings", updated, value => this.normalizeFrontMatterHeadings(value));
+      updated = this.runPostprocessStep(report, "formatAuthorAffiliationBlock", updated, value => this.formatAuthorAffiliationBlock(value));
       if (this.pref("suppressFigureOCRText", true)) {
         updated = this.runPostprocessStep(report, "suppressFigureOCRText", updated, value => this.suppressFigureOCRText(value));
         updated = this.runPostprocessStep(report, "removeLooseFigureOCRFragments", updated, value => this.removeLooseFigureOCRFragments(value));
@@ -1263,12 +1280,15 @@ ${bodyHTML}
       }
       updated = this.runPostprocessStep(report, "demoteNarrativeTableLeadIns", updated, value => this.demoteNarrativeTableLeadIns(value));
       updated = this.runPostprocessStep(report, "normalizeCaptionMathOCR", updated, value => this.normalizeCaptionMathOCR(value));
+      updated = this.runPostprocessStep(report, "restoreSequentialNumberedListItems", updated, value => this.restoreSequentialNumberedListItems(value));
       if (this.pref("cleanupSimpleLatex", true)) {
         updated = this.runPostprocessStep(report, "cleanupSimpleLatex", updated, value => this.cleanupSimpleLatex(value));
         updated = this.runPostprocessStep(report, "normalizePlainTableMathNotation", updated, value => this.normalizePlainTableMathNotation(value));
       }
+      updated = this.runPostprocessStep(report, "splitAffiliationParagraphs", updated, value => this.splitAffiliationParagraphs(value));
       updated = this.runPostprocessStep(report, "markWideTables", updated, value => this.markWideTables(value));
       updated = this.runPostprocessStep(report, "splitReferenceParagraphs", updated, value => this.splitReferenceParagraphs(value));
+      updated = this.restoreDataURLAttributes(updated, protectedDataURLs.urls);
 
       if (updated !== html) {
         await IOUtils.write(htmlPath, new TextEncoder().encode(updated));
@@ -1280,6 +1300,26 @@ ${bodyHTML}
         return { reportPath: options.reportPath, report };
       }
       return { reportPath: null, report };
+    },
+
+    protectDataURLAttributes(html) {
+      let urls = [];
+      let protectedHTML = String(html || "").replace(
+        /\b(src\s*=\s*)(["'])(data:image\/[^"']+)\2/gi,
+        (match, prefix, quote, url) => {
+          let token = `MINERUHTMLDATAURLTOKEN${urls.length}`;
+          urls.push(url);
+          return `${prefix}${quote}${token}${quote}`;
+        }
+      );
+      return { html: protectedHTML, urls };
+    },
+
+    restoreDataURLAttributes(html, urls) {
+      return String(html || "").replace(/MINERUHTMLDATAURLTOKEN(\d+)/g, (match, indexText) => {
+        let index = parseInt(indexText, 10);
+        return urls[index] || match;
+      });
     },
 
     createPostprocessReport({ htmlPath, sourceFileName, dataID, originalHTML, sourceMode, markdownImages, imageGroups, markdownBlocks, fallbackReason }) {
@@ -1358,7 +1398,7 @@ ${bodyHTML}
         `Parsed at: ${report.parsedAt || report.createdAt}`,
         `Report created at: ${report.createdAt}`,
         `Source PDF: ${report.sourceFileName}`,
-        `MinerU data_id: ${report.dataID}`,
+        `Local tracking id: ${report.dataID}`,
         `HTML path: ${report.htmlPath}`,
         `Source mode: ${report.sourceMode}`,
         `Markdown blocks: ${report.markdownBlocks}`,
@@ -1436,6 +1476,13 @@ p.mineru-reference {
 }
 h1, h2, h3 {
   line-height: 1.18 !important;
+}
+h1 .mineru-heading-math,
+h1 .katex,
+h1 math,
+h1 math * {
+  font-weight: 700 !important;
+  font-style: normal !important;
 }
 table p, table li, pre, code {
   text-align: left !important;
@@ -1523,6 +1570,25 @@ figure.mineru-subfigure img,
 figure.mineru-subfigure svg {
   margin: 0 auto 0.45em auto !important;
 }
+p.mineru-author-line {
+  margin: 0.7em 0 0.75em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+}
+p.mineru-author-line sup,
+p.mineru-affiliation sup,
+p.mineru-correspondence sup {
+  font-size: 0.72em !important;
+  line-height: 0 !important;
+  vertical-align: super !important;
+}
+p.mineru-author-line sup,
+p.mineru-affiliation sup {
+  margin-left: 0.04em !important;
+  margin-right: 0.18em !important;
+}
 figcaption.mineru-subcaption,
 p.mineru-figure-caption,
 p.mineru-table-caption {
@@ -1542,6 +1608,47 @@ p.mineru-figure-caption math *,
 p.mineru-table-caption math,
 p.mineru-table-caption math * {
   font-weight: 650 !important;
+}
+p.mineru-affiliation {
+  margin: 0 0 0.25em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+  line-height: 1.45 !important;
+  font-style: italic !important;
+}
+p.mineru-correspondence {
+  margin: 0 0 0.2em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+  line-height: 1.35 !important;
+  font-size: 0.95em !important;
+  font-style: italic !important;
+}
+p.mineru-mdpi-author-line {
+  margin: 0.85em 0 1.15em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+  line-height: 1.45 !important;
+  font-size: 1.05em !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+}
+p.mineru-mdpi-affiliation,
+p.mineru-mdpi-correspondence {
+  display: grid !important;
+  grid-template-columns: 2.25em minmax(0, 1fr) !important;
+  column-gap: 0.55em !important;
+  align-items: baseline !important;
+  margin: 0.18em 0 !important;
+  text-align: left !important;
+  text-justify: auto !important;
+  line-height: 1.32 !important;
+  font-size: 0.9em !important;
+  font-style: normal !important;
+}
+p.mineru-mdpi-affiliation sup,
+p.mineru-mdpi-correspondence sup {
+  justify-self: end !important;
 }
 .mineru-inline-math {
   font-family: "Times New Roman", "Cambria Math", serif !important;
@@ -2518,22 +2625,49 @@ pre {
         return "";
       }
       let stripped = this.stripMathDelimiters(raw);
+      let normalizedExpression = this.normalizeMathExpressionForRender(stripped.expression);
       let renderer = globalThis.MinerUHTMLKaTeX;
       if (renderer?.renderToString) {
         try {
-          return renderer.renderToString(stripped.expression.trim(), {
+          let rendered = renderer.renderToString(normalizedExpression.trim(), {
             throwOnError: false,
             output: "mathml",
             displayMode: displayMode || stripped.displayMode,
             strict: "ignore"
           });
+          if (rendered && !/\bkatex-error\b/i.test(rendered)) {
+            return rendered;
+          }
         }
         catch (error) {
           log(`KaTeX render failed: ${error?.message || error}`);
         }
       }
-      let cleaned = this.cleanLatexExpression(stripped.expression);
+      let cleaned = this.cleanLatexExpression(normalizedExpression);
       return cleaned || this.escapeHTML(raw);
+    },
+
+    normalizeMathExpressionForRender(expression) {
+      return this.decodeMathHTMLEntities(String(expression || ""))
+        .replace(/\b(\d)\s*\.\s*((?:\d\s*){1,6})\b/g, (match, integer, decimals) => `${integer}.${decimals.replace(/\s+/g, "")}`)
+        .replace(/\b(\d(?:\s+\d){1,8})(?=\s*(?:\\(?:mathrm|text)\s*\{|[A-Za-z%]|\\mu|\\circ|\\times|\\cdot|\^|_|$))/g, digits => digits.replace(/\s+/g, ""))
+        .replace(/~+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    },
+
+    decodeMathHTMLEntities(text) {
+      return String(text || "")
+        .replace(/&amp;(gt|lt|le|ge|nbsp|times|micro|mu|deg|minus);/gi, "&$1;")
+        .replace(/&gt;/gi, ">")
+        .replace(/&lt;/gi, "<")
+        .replace(/&le;/gi, "\\le ")
+        .replace(/&ge;/gi, "\\ge ")
+        .replace(/&times;/gi, "\\times ")
+        .replace(/&micro;|&mu;/gi, "\\mu ")
+        .replace(/&deg;/gi, "^ { \\circ }")
+        .replace(/&minus;/gi, "-")
+        .replace(/&nbsp;/gi, " ");
     },
 
     stripMathDelimiters(expression) {
@@ -2557,6 +2691,435 @@ pre {
       return html.replace(/<td>\s*([A-Za-z])_([A-Za-z](?:,?[A-Za-z]){0,5})\s*<\/td>/g, (match, base, subscript) => {
         return `<td><span class="mineru-inline-math">${base}<sub>${subscript}</sub></span></td>`;
       });
+    },
+
+    normalizeFrontMatterHeadings(html) {
+      let updated = String(html || "").replace(/(<main\b[^>]*>\s*)<h1\b[^>]*>[^<]{20,}?\s-\s[^<]*?\s-\s(?:19|20)\d{2}\s*<\/h1>\s*(?=<h1\b)/i, "$1");
+      return updated.replace(/<h1\b([^>]*)>([\s\S]*?)<\/h1>/gi, (match, attrs, inner) => {
+        let normalizedInner = inner.replace(/<span\b[^>]*class=["'][^"']*\bkatex\b[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, span => {
+          return this.headingMathText(span) || span;
+        });
+        normalizedInner = normalizedInner
+          .replace(/\b(\d+)\s+mm\s+(\d+)\s+L\b/g, "$1 mm $2L")
+          .replace(/\b(\d+)\s+mm(\d+L)\b/g, "$1 mm $2");
+        return `<h1${attrs}>${normalizedInner}</h1>`;
+      });
+    },
+
+    headingMathText(html) {
+      let annotation = String(html || "").match(/<annotation\b[^>]*encoding=["']application\/x-tex["'][^>]*>([\s\S]*?)<\/annotation>/i);
+      if (!annotation) {
+        return "";
+      }
+      let expression = annotation[1]
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\s+/g, " ")
+        .trim();
+      let stainless = expression.match(/^((?:\d\s*)+)\s*\\+\s*\\mathrm\s*\{\s*mm\s*\}\s*\\*\s*((?:\d\s*)+)\s*\\mathrm\s*\{\s*L\s*\}$/i);
+      if (stainless) {
+        return this.headingMathStrong(`${stainless[1].replace(/\s+/g, "")} mm ${stainless[2].replace(/\s+/g, "")}L`);
+      }
+      let compact = expression
+        .replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/gi, "$1")
+        .replace(/\\/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      stainless = compact.match(/^((?:\d\s*)+)\s+mm\s+((?:\d\s*)+)\s*L$/i);
+      if (stainless) {
+        return this.headingMathStrong(`${stainless[1].replace(/\s+/g, "")} mm ${stainless[2].replace(/\s+/g, "")}L`);
+      }
+      return "";
+    },
+
+    headingMathStrong(text) {
+      return `<strong class="mineru-heading-math">${this.escapeHTML(String(text || ""))}</strong>`;
+    },
+
+    formatAuthorAffiliationBlock(html) {
+      html = this.formatMDPIFrontMatterBlock(html);
+      return html.replace(/((?:<h1\b[^>]*>[\s\S]*?<\/h1>\s*)+)<p([^>]*)>((?:(?!<p\b|<\/p>|<h[1-6]\b)[\s\S])*)<\/p>\s*<p([^>]*)>((?:(?!<p\b|<\/p>|<h[1-6]\b)[\s\S])*)<\/p>(?:\s*<p([^>]*)>((?:(?!<p\b|<\/p>|<h[1-6]\b)[\s\S])*)<\/p>)?(\s*<h1\b[^>]*>\s*(?:Abstract|a\s+r\s+t\s+i\s+c\s+l\s+e\s+i\s+n\s+f\s+o|a\s+b\s+s\s+t\s+r\s+a\s+c\s+t)\s*<\/h1>)/i, (match, heading, authorAttrs, authorInner, affiliationAttrs, affiliationInner, correspondenceAttrs, correspondenceInner, abstractHeading) => {
+        let authorText = this.normalizeFrontMatterAuthorText(authorInner);
+        let affiliationText = this.normalizeFrontMatterText(this.plainText(affiliationInner));
+        if (!this.isLikelyAuthorLineText(authorText) || !this.isLikelyFrontMatterAffiliationText(affiliationText)) {
+          return match;
+        }
+        let authorHTML = this.formatAuthorLineHTML(authorText);
+        let parts = this.splitFrontMatterAffiliationAndEmails(affiliationText);
+        let formatted = [
+          `<p${this.addClassToAttributes(authorAttrs, "mineru-author-line")}>${authorHTML}</p>`
+        ];
+        for (let affiliation of parts.affiliations) {
+          formatted.push(`<p${this.addClassToAttributes(affiliationAttrs, "mineru-affiliation")}>${this.formatAffiliationLineHTML(affiliation)}</p>`);
+        }
+        for (let email of parts.emails) {
+          formatted.push(`<p class="mineru-correspondence"><sup>${this.escapeHTML(email.marker)}</sup> ${this.escapeHTML(email.address)}</p>`);
+        }
+        if (correspondenceInner) {
+          let correspondenceText = this.normalizeCorrespondenceText(this.plainText(correspondenceInner));
+          if (this.isLikelyCorrespondenceText(correspondenceText)) {
+            formatted.push(`<p${this.addClassToAttributes(correspondenceAttrs || "", "mineru-correspondence")}>${this.formatCorrespondenceLineHTML(correspondenceText)}</p>`);
+          }
+          else {
+            formatted.push(`<p${correspondenceAttrs || ""}>${correspondenceInner}</p>`);
+          }
+        }
+        return `${heading}${formatted.join("\n")}${abstractHeading}`;
+      });
+    },
+
+    normalizeFrontMatterAuthorText(authorHTML) {
+      let text = this.plainText(String(authorHTML || "")
+        .replace(/<span\b[^>]*class=["'][^"']*\bkatex\b[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, match => {
+          return this.extractLatexSuperscriptMarker(match);
+        }));
+      return this.normalizeFrontMatterText(text
+        .replace(/\)\s+(?=[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+)+)/gu, ", ")
+        .replace(/((?:\d+|[a-z])(?:\s*,\s*(?:\d+|[a-z]|\*))*)\s+(?=[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+)+)/giu, "$1, ")
+        .replace(/\s+,/g, ",")
+        .replace(/,\s*,+/g, ","));
+    },
+
+    extractLatexSuperscriptMarker(html) {
+      let annotation = String(html || "").match(/<annotation\b[^>]*encoding=["']application\/x-tex["'][^>]*>([\s\S]*?)<\/annotation>/i);
+      if (!annotation) {
+        return " ";
+      }
+      let marker = annotation[1]
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .match(/\^\s*\{\s*([^{}]+?)\s*\}/);
+      if (!marker) {
+        return " ";
+      }
+      return ` ${marker[1].replace(/\s+/g, "")} `;
+    },
+
+    formatMDPIFrontMatterBlock(html) {
+      return html.replace(/(<h1\b[^>]*>\s*Article\s+[\s\S]*?<\/h1>\s*)<p([^>]*)>((?:(?!<p\b|<\/p>|<h[1-6]\b)[\s\S])*)<\/p>((?:\s*<p\b[^>]*>\s*(?:Citation:|Academic Editor:|Received:)[\s\S]*?<\/p>)+)\s*<p([^>]*)>((?:(?!<p\b|<\/p>|<h[1-6]\b)[\s\S])*)<\/p>(\s*<p\b[^>]*>\s*Abstract:)/i, (match, heading, authorAttrs, authorInner, metadataHTML, affiliationAttrs, affiliationInner, abstractStart) => {
+        let authorText = this.normalizeMDPIAuthorText(authorInner);
+        let affiliationText = this.normalizeMDPIAffiliationText(affiliationInner);
+        if (!this.isLikelyMDPIAuthorLineText(authorText) || !this.isLikelyMDPIAffiliationText(affiliationText)) {
+          return match;
+        }
+        let formatted = [
+          `<p${this.addClassToAttributes(authorAttrs, "mineru-author-line mineru-mdpi-author-line")}>${this.formatMDPIAuthorLineHTML(authorText)}</p>`,
+          metadataHTML
+        ];
+        let parts = this.splitMDPIAffiliationBlock(affiliationText);
+        for (let affiliation of parts.affiliations) {
+          formatted.push(`<p${this.addClassToAttributes(affiliationAttrs, "mineru-affiliation mineru-mdpi-affiliation")}><sup>${this.escapeHTML(affiliation.marker)}</sup><span>${this.escapeHTML(affiliation.text)}</span></p>`);
+        }
+        if (parts.correspondence) {
+          formatted.push(`<p class="mineru-correspondence mineru-mdpi-correspondence"><sup>*</sup><span>Correspondence: ${this.escapeHTML(parts.correspondence)}</span></p>`);
+        }
+        return `${heading}${formatted.join("\n")}${abstractStart}`;
+      });
+    },
+
+    normalizeMDPIAuthorText(authorHTML) {
+      return String(this.plainText(String(authorHTML || "")
+        .replace(/\\<em>/gi, "*")
+        .replace(/\\<\/em>/gi, "*")))
+        .replace(/\s+/g, " ")
+        .replace(/\s+([,.;:])/g, "$1")
+        .replace(/\\+/g, "*")
+        .replace(/\s*\*\s*/g, "*")
+        .replace(/,\s*\*/g, ",*")
+        .replace(/\s+and\s+/gi, " and ")
+        .trim();
+    },
+
+    normalizeMDPIAffiliationText(affiliationHTML) {
+      return this.normalizeFrontMatterText(this.plainText(String(affiliationHTML || "")
+        .replace(/&amp;/g, "&")))
+        .replace(/\\\*/g, "*")
+        .replace(/\s+([;:,.])/g, "$1")
+        .trim();
+    },
+
+    isLikelyMDPIAuthorLineText(text) {
+      let value = String(text || "").trim();
+      return value.length >= 20
+        && value.length <= 350
+        && /\b[A-Z][\p{L}.'-]+\s+[A-Z][\p{L}.'-]+\s+\d/iu.test(value)
+        && /\*/.test(value)
+        && !/@|\b(?:Citation|University|Abstract)\b/i.test(value);
+    },
+
+    isLikelyMDPIAffiliationText(text) {
+      let value = String(text || "").trim();
+      return value.length >= 80
+        && value.length <= 1400
+        && /\bCorrespondence:\s*\S+@\S+/i.test(value)
+        && /\b(?:University|Institution|Laboratory|Research)\b/i.test(value)
+        && /(?:^|\s)2\s+\p{Lu}/u.test(value);
+    },
+
+    formatMDPIAuthorLineHTML(text) {
+      let value = String(text || "").trim();
+      let tokenPattern = /([A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+)+)\s+(\d+(?:\s*,\s*\d+)*(?:\s*,\s*\*)?|\d+\s*,?\s*\*)/gu;
+      let output = "";
+      let lastIndex = 0;
+      let match;
+      while ((match = tokenPattern.exec(value))) {
+        output += this.escapeHTML(value.slice(lastIndex, match.index));
+        output += `${this.escapeHTML(match[1])}<sup>${this.escapeHTML(match[2].replace(/\s+/g, ""))}</sup>`;
+        lastIndex = tokenPattern.lastIndex;
+      }
+      output += this.escapeHTML(value.slice(lastIndex));
+      return output.replace(/\s+,/g, ",").replace(/\s+and\s+/g, " and ");
+    },
+
+    splitMDPIAffiliationBlock(text) {
+      let value = String(text || "").replace(/\s+/g, " ").trim();
+      let correspondence = "";
+      value = value.replace(/\*+\s*Correspondence:\s*([\s\S]+)$/i, (match, correspondenceText) => {
+        correspondence = correspondenceText.replace(/\s+([;:,.])/g, "$1").trim();
+        return "";
+      }).trim();
+      let markers = [{ start: 0, marker: "1" }];
+      let markerPattern = /(?:^|\s)([2-9]\d?)\s+(?=(?:[A-Z][A-Za-z&.-]+|Key\s+Laboratory|School|College|Department|Faculty|Institute|Laboratory|University|Jiangsu|Hebei)\b)/g;
+      let match;
+      while ((match = markerPattern.exec(value))) {
+        markers.push({
+          start: match.index + (/^\s/.test(match[0]) ? 1 : 0),
+          marker: match[1]
+        });
+      }
+      markers = markers
+        .filter((marker, index, all) => index === 0 || marker.start > all[index - 1].start)
+        .sort((a, b) => a.start - b.start);
+      let affiliations = [];
+      for (let index = 0; index < markers.length; index++) {
+        let start = markers[index].start;
+        let end = index + 1 < markers.length ? markers[index + 1].start : value.length;
+        let segment = value.slice(start, end).trim();
+        segment = segment.replace(new RegExp(`^${this.escapeRegExp(markers[index].marker)}\\s+`), "");
+        segment = segment.replace(/\s+([;:,.])/g, "$1").trim();
+        if (segment) {
+          affiliations.push({ marker: markers[index].marker, text: segment });
+        }
+      }
+      return { affiliations, correspondence };
+    },
+
+    normalizeFrontMatterText(text) {
+      return String(text || "")
+        .replace(/\s+/g, " ")
+        .replace(/\s+([,.;:])/g, "$1")
+        .replace(/\\\*/g, "*")
+        .replace(/[⁎∗]/g, "*")
+        .replace(/,\s*(\d)(?=\s|$)/g, "$1")
+        .replace(/\bKo\s+vács\b/g, "Kovács")
+        .replace(/\bFa\s+bi\s+an\b/gi, "Fábián")
+        .trim();
+    },
+
+    isLikelyAuthorLineText(text) {
+      let value = String(text || "").trim();
+      if (value.length < 8 || value.length > 260 || !/(?:\d|[a-z](?:\s*,\s*(?:[a-z]|\*))?\b|\*)/i.test(value)) {
+        return false;
+      }
+      if (/@|\b(?:University|Institute|Department|Faculty|Laboratory|Abstract)\b/i.test(value)) {
+        return false;
+      }
+      return /[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+){0,4}\s*,?\s*(?:\d+|[a-z](?:\s*,\s*(?:[a-z]|\*))*)\b/iu.test(value);
+    },
+
+    isLikelyFrontMatterAffiliationText(text) {
+      let value = String(text || "").trim();
+      return value.length >= 25
+        && value.length <= 900
+        && (/@/.test(value) || /(?:^|[;\s])[a-z]\s+\p{Lu}/u.test(value))
+        && /\b(?:University|School|College|Department|Faculty|Institute|Laborator(?:y|ies)|Center|Centre|Division|Group)\b/i.test(value);
+    },
+
+    formatAuthorLineHTML(text) {
+      let value = String(text || "").replace(/\\\*/g, "*").trim();
+      value = value.replace(/[⁎∗]/g, "*");
+      let segments = this.splitAuthorLineSegments(value);
+      if (segments.length >= 2) {
+        return segments.map(segment => this.formatAuthorSegmentHTML(segment)).join(", ");
+      }
+      let tokenPattern = /(\b(?:[A-Z]\.?\s*)?(?:[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+){0,4})),?\s*((?:\d+(?:\s*,\s*\d+)*|[a-z](?:\s*,\s*(?:[a-z]|\*))*))\b/giu;
+      let output = "";
+      let lastIndex = 0;
+      let match;
+      while ((match = tokenPattern.exec(value))) {
+        output += this.escapeHTML(value.slice(lastIndex, match.index));
+        output += `${this.escapeHTML(match[1])}<sup>${this.escapeHTML(match[2].replace(/\s+/g, ""))}</sup>`;
+        lastIndex = tokenPattern.lastIndex;
+      }
+      output += this.escapeHTML(value.slice(lastIndex));
+      return output;
+    },
+
+    splitAuthorLineSegments(text) {
+      return String(text || "")
+        .split(/\s*,\s*(?=(?:[A-Z]\.?\s*)?[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+)+)/u)
+        .map(segment => segment.trim())
+        .filter(Boolean);
+    },
+
+    formatAuthorSegmentHTML(segment) {
+      let value = String(segment || "")
+        .replace(/\\\*/g, "*")
+        .replace(/[⁎∗]/g, "*")
+        .replace(/\s+([,;:])/g, "$1")
+        .trim();
+      let markerMatch = value.match(/^(.+?)(\d+(?:\s*,\s*(?:\d+|\*))*(?:\s*,\s*\*)?|[a-z](?:\s*,\s*(?:[a-z]|\*))*)$/iu);
+      if (!markerMatch) {
+        return this.escapeHTML(value);
+      }
+      let name = markerMatch[1].replace(/[,\s]+$/g, "").trim();
+      let marker = markerMatch[2].replace(/\s+/g, "");
+      if (!name || !marker || !/[A-Z][\p{L}.'-]+(?:\s+[A-Z][\p{L}.'-]+)+$/u.test(name)) {
+        return this.escapeHTML(value);
+      }
+      return `${this.escapeHTML(name)}<sup>${this.escapeHTML(marker)}</sup>`;
+    },
+
+    formatAffiliationLineHTML(text) {
+      let value = String(text || "").trim();
+      let marker = value.match(/^((?:\d+|[a-z])(?:\s*,\s*(?:\d+|[a-z]))*)\s+(.+)$/i);
+      if (!marker) {
+        return this.escapeHTML(value);
+      }
+      return `<sup>${this.escapeHTML(marker[1].replace(/\s+/g, ""))}</sup> ${this.escapeHTML(marker[2].trim())}`;
+    },
+
+    splitFrontMatterAffiliationAndEmails(text) {
+      let value = String(text || "").replace(/\s+/g, " ").trim();
+      let emailPattern = /(?:^|\s)(\d+)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})(?=\s|$)/gi;
+      let emails = [];
+      let firstEmailIndex = -1;
+      let match;
+      while ((match = emailPattern.exec(value))) {
+        if (firstEmailIndex < 0) {
+          firstEmailIndex = match.index + (/^\s/.test(match[0]) ? 1 : 0);
+        }
+        emails.push({
+          marker: match[1],
+          address: match[2]
+        });
+      }
+      let affiliation = firstEmailIndex >= 0 ? value.slice(0, firstEmailIndex).trim() : value;
+      affiliation = affiliation
+        .replace(/\s+\d+\s*$/g, "")
+        .replace(/\s+([,.;:])/g, "$1")
+        .trim();
+      let affiliations = this.splitFrontMatterAffiliationSegments(affiliation);
+      return { affiliations, emails };
+    },
+
+    splitFrontMatterAffiliationSegments(text) {
+      let value = String(text || "").replace(/\s+/g, " ").trim();
+      if (!value) {
+        return [];
+      }
+      let markerSegments = this.splitAffiliationText(value);
+      if (markerSegments.length >= 2) {
+        return markerSegments;
+      }
+      let segments = value
+        .split(/\s*;\s*(?=(?:\d+|[a-z])\s+\p{Lu})/u)
+        .map(segment => segment.trim())
+        .filter(Boolean);
+      return segments.length ? segments : [value];
+    },
+
+    normalizeCorrespondenceText(text) {
+      return String(text || "")
+        .replace(/\s+/g, " ")
+        .replace(/\\\*/g, "*")
+        .replace(/^(\*+\s*)?esponding\s+author\b/i, "* Corresponding author")
+        .replace(/^(\*+\s*)?corresponding\s+author\b/i, "* Corresponding author")
+        .replace(/\s+([,.;:])/g, "$1")
+        .trim();
+    },
+
+    isLikelyCorrespondenceText(text) {
+      let value = String(text || "").trim();
+      return value.length >= 18
+        && value.length <= 500
+        && /\b(?:Corresponding author|E-?mail address|Email address|Tel\.?|fax)\b/i.test(value);
+    },
+
+    formatCorrespondenceLineHTML(text) {
+      let value = this.normalizeCorrespondenceText(text);
+      let marker = "";
+      value = value.replace(/^\*+\s*/, () => {
+        marker = "*";
+        return "";
+      }).trim();
+      let prefix = marker ? `<sup>${this.escapeHTML(marker)}</sup> ` : "";
+      return `${prefix}${this.escapeHTML(value)}`;
+    },
+
+    splitAffiliationParagraphs(html) {
+      return html.replace(/<p([^>]*)>((?:(?!<p\b|<\/p>)[\s\S])*)<\/p>/gi, (match, attrs, inner) => {
+        if (/<(?:img|figure|table|math|h[1-6]|ol|ul|li)\b/i.test(inner)) {
+          return match;
+        }
+        let text = this.plainText(inner).replace(/\s+/g, " ").trim();
+        let segments = this.splitAffiliationText(text);
+        if (segments.length < 2) {
+          return match;
+        }
+        let affiliationAttrs = this.addClassToAttributes(attrs, "mineru-affiliation");
+        return segments.map(segment => `<p${affiliationAttrs}>${this.escapeHTML(segment)}</p>`).join("\n");
+      });
+    },
+
+    splitAffiliationText(text) {
+      let value = String(text || "").replace(/\s+/g, " ").trim();
+      if (!this.isLikelyAffiliationParagraphText(value)) {
+        return [];
+      }
+      let markerPattern = /(?:^|\s)([a-z])\s+(?=(?:School|College|Department|Faculty|Institute|Laboratory|Key Laboratory|State\s+Key\s+Lab|University|West Pipeline|PipeChina|[A-Z][A-Za-z&.-]*(?:\s+[A-Z][A-Za-z&.-]*){0,7}\s+(?:University|Company|Corporation|Institute|Laboratory|Center|Centre|Co\.?|Ltd\.?))\b)/g;
+      let markers = /^[a-z]\s+\p{Lu}/u.test(value) ? [0] : [];
+      let match;
+      while ((match = markerPattern.exec(value))) {
+        let offset = /^\s/.test(match[0]) ? 1 : 0;
+        let start = match.index + offset;
+        if (!markers.includes(start)) {
+          markers.push(start);
+        }
+      }
+      markers.sort((a, b) => a - b);
+      if (markers.length < 2 || markers[0] !== 0) {
+        return [];
+      }
+      let segments = [];
+      for (let index = 0; index < markers.length; index++) {
+        let start = markers[index];
+        let end = index + 1 < markers.length ? markers[index + 1] : value.length;
+        let segment = value.slice(start, end).trim().replace(/\s+([,.;:])/g, "$1");
+        if (segment) {
+          segments.push(segment);
+        }
+      }
+      return segments.length >= 2 ? segments : [];
+    },
+
+    isLikelyAffiliationParagraphText(text) {
+      let value = String(text || "").trim();
+      if (value.length < 45 || value.length > 1200) {
+        return false;
+      }
+      if (!/^[a-z]\s+[A-Z]/.test(value)) {
+        return false;
+      }
+      if (!/\b(?:University|School|College|Department|Institute|Laborator(?:y|ies)|Company|Corporation|PipeChina|Pipeline|Co\.,?\s*Ltd|Ltd\.?)\b/i.test(value)) {
+        return false;
+      }
+      if (!/\b(?:China|USA|United States|UK|Germany|Japan|Korea|France|Italy|Canada|Australia|India)\b/i.test(value)) {
+        return false;
+      }
+      return /(?:^|\s)[b-z]\s+(?:[A-Z][A-Za-z&.-]*|School|College|Department|Institute|Laboratory)\b/.test(value);
     },
 
     markWideTables(html) {
@@ -2587,7 +3150,23 @@ pre {
       return maxColumns;
     },
 
+    restoreSequentialNumberedListItems(html) {
+      return String(html || "").replace(/(<p\b[^>]*>\s*1\.\s+[\s\S]*?<\/p>)\s*<ul>\s*<li>\s*((?:Schematic diagram|The dimensions|The samples|Other variables)\b[\s\S]*?)\s*<\/li>\s*<\/ul>/gi, (match, firstItem, secondItem) => {
+        return `${firstItem}\n<p>2. ${secondItem.trim()}</p>`;
+      });
+    },
+
     splitReferenceParagraphs(html) {
+      html = this.repairMisplacedBareReferenceBlock(html);
+      html = html.replace(/(<h[1-6]\b[^>]*>\s*References\s*<\/h[1-6]>\s*)<p([^>]*)>\s*([\s\S]*?)\s*<\/p>/gi, (match, heading, attrs, content) => {
+        let parts = this.separateNomenclatureTail(content);
+        let entries = this.splitBareNumberedReferenceEntries(parts.referenceText);
+        if (entries.length < 3) {
+          return match;
+        }
+        let tail = parts.tail ? `<p>${this.escapeHTML(parts.tail)}</p>` : "";
+        return `${heading}${this.renderReferenceEntriesBlock(entries, entry => entry)}${tail}`;
+      });
       return html.replace(/<p([^>]*)>\s*(\[\d{1,3}\]\s+[\s\S]*?\[\d{1,3}\]\s+[\s\S]*?)\s*<\/p>/gi, (match, attrs, content) => {
         let entries = this.splitReferenceEntries(content);
         if (entries.length < 2) {
@@ -2597,9 +3176,80 @@ pre {
       });
     },
 
+    repairMisplacedBareReferenceBlock(html) {
+      return html.replace(/(<h[1-6]\b[^>]*>\s*References\s*<\/h[1-6]>\s*)<ul>\s*<li>([\s\S]*?)<\/li>\s*<\/ul>\s*(<h[1-6]\b[^>]*>\s*Acknowledg(?:e)?ments\s*<\/h[1-6]>\s*)<p([^>]*)>\s*([\s\S]*?)\s*<\/p>/gi, (match, heading, firstReference, acknowledgmentsHeading, paragraphAttrs, paragraphContent) => {
+        let parts = this.separateNomenclatureTail(paragraphContent);
+        let entries = this.splitBareNumberedReferenceEntries(`1. Placeholder reference. ${parts.referenceText}`).slice(1);
+        if (entries.length < 3 || !/^2\.\s+/.test(this.plainText(entries[0]).trim())) {
+          return match;
+        }
+        let first = `1. ${this.plainText(firstReference).replace(/\s+/g, " ").trim()}`;
+        if (first.length < 12) {
+          return match;
+        }
+        let referenceList = this.renderReferenceEntriesBlock([first, ...entries], entry => this.escapeHTML(entry));
+        let tail = parts.tail ? `<p${paragraphAttrs || ""}>${this.escapeHTML(parts.tail)}</p>` : "";
+        return `${heading}${referenceList}${acknowledgmentsHeading}${tail}`;
+      });
+    },
+
+    separateNomenclatureTail(content) {
+      let value = String(content || "").replace(/\s+/g, " ").trim();
+      let tailPattern = /\s+(?=(?:ANN|ANOVA|BR|BW|DP|EMs|GA|GMSELOO|LAW|LOO|MOGA|NN|NSGA|NSGA-II|RBF|RBFNN|RMAE|RMSE|SVM|SVR)\s+(?:Artificial|Analysis|Bead|Depth|Ensemble|Genetic|Generalized|Laser|Leave|Multi|Neural|Non|Improved|Radial|Relative|Root|Support)\b)/;
+      let tailMatch = value.match(tailPattern);
+      if (!tailMatch) {
+        return { referenceText: value, tail: "" };
+      }
+      let tailStart = tailMatch.index + tailMatch[0].length;
+      return {
+        referenceText: value.slice(0, tailMatch.index).trim(),
+        tail: value.slice(tailStart).trim()
+      };
+    },
+
+    splitBareNumberedReferenceEntries(content) {
+      let value = String(content || "").replace(/\s+/g, " ").trim();
+      if (!value || !/^\d{1,3}\.\s+/.test(this.plainText(value))) {
+        return [];
+      }
+      let markers = [];
+      let markerPattern = /(^|\s)(\d{1,3})\.\s+(?=(?:[A-ZÀ-ÖØ-ÞÅÄÖÜÉÈÁÂÃÇÑÓŚŠŽŻŁ]|\p{Lu}|Md\.|Å\.))/gu;
+      let match;
+      while ((match = markerPattern.exec(value))) {
+        let start = match.index + match[1].length;
+        let number = parseInt(match[2], 10);
+        if (!Number.isFinite(number)) {
+          continue;
+        }
+        markers.push({ start, number });
+      }
+      if (markers.length < 3 || markers[0].start !== 0 || markers[0].number !== 1) {
+        return [];
+      }
+      let ascending = 0;
+      for (let index = 1; index < markers.length; index++) {
+        if (markers[index].number > markers[index - 1].number) {
+          ascending++;
+        }
+      }
+      if (ascending < Math.max(2, Math.floor(markers.length * 0.6))) {
+        return [];
+      }
+      let entries = [];
+      for (let index = 0; index < markers.length; index++) {
+        let start = markers[index].start;
+        let end = index + 1 < markers.length ? markers[index + 1].start : value.length;
+        let entry = value.slice(start, end).trim();
+        if (entry) {
+          entries.push(entry);
+        }
+      }
+      return entries.length >= 3 ? entries : [];
+    },
+
     cleanLatexExpression(expression) {
       let value = expression.trim();
-      if (!value || /[<>]/.test(value)) {
+      if (!value || /</.test(value)) {
         return "";
       }
       let underline = value.match(/^\\underline\s*\{\s*([\s\S]+?)\s*\}$/);

@@ -6,7 +6,7 @@ Submit a Zotero PDF attachment to the MinerU precise parsing API, import the gen
 
 ## Download
 
-- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.71.xpi)
+- [Latest XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi)
 - [Latest Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest)
 - [MinerU API Docs](https://mineru.net/apiManage/docs)
 
@@ -19,15 +19,34 @@ Submit a Zotero PDF attachment to the MinerU precise parsing API, import the gen
 - Keeps image blocks faithful to MinerU output instead of recombining split subfigures after parsing.
 - Bundles KaTeX to render MinerU LaTeX fragments as MathML and uses a Times New Roman / Noto Serif SC reading font stack.
 - Splits bracketed bibliography entries such as `[1] ... [2] ...` into separate reference paragraphs.
+- Splits compact bare-numbered reference paragraphs such as `1. ... 2. ...` after a References heading.
 - Keeps rendered math inside figure/table captions bold with the surrounding caption text.
 - Uses an A4-like page width, screen margins, and print `@page` margins for paper-friendly HTML reading.
 - Automatically compacts wide tables so multi-column tables fit inside the A4-style page.
 - Cleans common reading friction in the generated HTML, including paragraph alignment, simple LaTeX, and figure OCR noise.
 
-## Version 0.1.71
+## Version 0.1.96
 
 This release focuses on paper-like reading quality for MinerU output:
 
+- Keeps Markdown output generation alive when a result archive does not contain HTML fallback files.
+- Aligns the MinerU precise parsing request with the reference plugin's core payload.
+- Embeds original MinerU zip images through byte-array base64 conversion instead of binary strings, avoiding silent JPEG byte corruption and dark image bands.
+- Protects image data URLs during HTML postprocessing so text, formula, and unit cleanup rules cannot alter base64 characters.
+- Uses original MinerU zip images directly instead of replacing them with local PDF crops, avoiding PDF.js/canvas color-space artifacts.
+- Keeps postprocess reporting focused on HTML cleanup and image counts without PDF crop replacement counters.
+- Splits bare-numbered References paragraphs into separate entries when MinerU compacts them into one paragraph.
+- Repairs misplaced reference blocks where the first reference is parsed as a list item and the remaining numbered references are moved after an acknowledgments heading.
+- Cleans title-page heading math, glued author markers, compact a/b affiliations, and misplaced numbered experimental-list items in Elsevier-style outputs.
+- Restores title-page stainless-steel phrases such as `10 mm 316L` when MinerU emits the phrase as a KaTeX annotation.
+- Keeps restored title-page math/text fragments bold so they match the surrounding paper title.
+- Formats Elsevier/CIRP title pages where letter affiliation markers are glued to author surnames and affiliation rows are compacted without semicolons.
+- Normalizes Springer/Elsevier title pages where author superscripts are rendered as KaTeX fragments or the corresponding-author asterisk is split from the author line.
+- Formats MDPI-style title pages with a bold author line, superscript author markers, and numbered affiliation rows.
+- Decodes escaped comparison operators in inline math before KaTeX rendering to avoid red error fragments.
+- Formats title-page author, affiliation, and correspondence blocks with left-aligned, non-justified lines and numeric or letter superscript markers.
+- Avoids treating ordinary connector words such as "and" as letter footnote markers.
+- Removes the parsing model selector from preferences and keeps the current MinerU default parsing path.
 - Preserves original grouped figures by using MinerU's `doclayout_yolo` layout path and avoiding post-hoc image recomposition.
 - Renders inline and block LaTeX with bundled KaTeX MathML output.
 - Uses Times New Roman / Noto Serif SC typography with an A4-style reading page and print margins.
@@ -39,3 +58,4 @@ This release focuses on paper-like reading quality for MinerU output:
 This plugin's MinerU request shape, Markdown-first rendering direction, formula rendering approach, and reference-list handling were informed by the Full Text Translate Zotero plugin.
 
 Formula rendering is powered by a bundled KaTeX build.
+
