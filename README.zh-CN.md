@@ -6,6 +6,14 @@ MinerU HTML Parser for Zotero 可以把 Zotero 里的 PDF 附件提交给 MinerU
 
 [下载最新版 XPI](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest/download/mineru-html-parser-0.1.96.xpi) | [查看 Release](https://github.com/understandlxy/mineru-html-parser-zotero/releases/latest) | [MinerU API 文档](https://mineru.net/apiManage/docs)
 
+## 原 PDF 与解析 HTML 对比
+
+下面这个例子展示了原始论文 PDF 和插件生成的 HTML 附件之间的差异。HTML 会保留论文主要内容，同时去掉 PDF 页面中较重的版面元素，让 Zotero 里的阅读更接近干净的文章页面。
+
+| 原 PDF | 解析后的 HTML |
+| --- | --- |
+| <img src="docs/images/original-pdf.jpg" alt="原始 PDF 页面截图" width="420"> | <img src="docs/images/parsed-html.jpg" alt="解析后的 HTML 阅读页面截图" width="420"> |
+
 ## 功能
 
 - 在 Zotero 条目或附件右键菜单中添加 `用 MinerU 解析为 HTML`。
